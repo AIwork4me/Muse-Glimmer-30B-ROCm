@@ -34,9 +34,12 @@ silently no-op; throughput is terrible.
 ([vllm-project/vllm#51136][aiter]). gfx1151 is RDNA 3.5, so AITER is absent.
 Setting `VLLM_ROCM_USE_AITER=1` only forces broken emulation.
 
-**Fix:** Do **not** set `VLLM_ROCM_USE_AITER`. Use `--attention-backend
-FLASH_ATTN` with `FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE` (the Triton-on-AMD
-path); `TRITON_ATTN` is the fallback. This is encoded in
+**Fix:** Do **not** set `VLLM_ROCM_USE_AITER`, and use **`--attention-backend
+TRITON_ATTN`** (with `FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE`). `FLASH_ATTN` does
+*not* work on gfx1151 either: this build logs `Using FlashAttention version None`
+and the first forward pass asserts `FlashAttention version not detected` (no
+flash-attn library codegen for RDNA 3.5). `TRITON_ATTN` (Triton kernels) is the
+validated backend. This is encoded in
 `configs/serve-args.conf` + `configs/vllm-gfx1151.env` and asserted by
 `tests/test_serve_args.py`.
 

@@ -20,10 +20,10 @@ released wheel, which is the root reason for most of the deltas below.
 | Install | docker `vllm/vllm-openai-rocm:nightly` | **source build**, PR #51655 pinned commit, `PYTORCH_ROCM_ARCH=gfx1151` + `import amdsmi` shim | AMD: Ryzen APUs are pip/source-only; **no gfx1151 docker**; prebuilt images throw `invalid device function` ([ROCm/ROCm#4909][invdev]) |
 | PyTorch | (in image) | **TheRock gfx1151 nightly** wheel, py3.12, numpy<2 | stock ROCm wheels lack gfx1151 codegen |
 | Precision | bf16 (72 GB) / fp8_block (40 GB) | **bf16 only** | FP8 matrix units are RDNA4/CDNA3+; vLLM FP8 won't run on gfx1151 |
-| Attention backend | `--attention-backend ROCM_AITER_FA` | **`FLASH_ATTN`** (`FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE`), fallback `TRITON_ATTN` | AITER is hard-gated to CDNA3+/RDNA4 via `get_cdna_version()>2` ([vllm-project/vllm#51136][aiter]) |
+| Attention backend | `--attention-backend ROCM_AITER_FA` | **`TRITON_ATTN`** (Triton kernels; `FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE`) | AITER is hard-gated to CDNA3+/RDNA4 ([vllm-project/vllm#51136][aiter]); `FLASH_ATTN` *also* fails here — it asserts "FlashAttention version not detected" (no flash-attn codegen for gfx1151) |
 | Env | `VLLM_ROCM_USE_AITER=1` | **not set** (auto-disables) | same AITER gate |
 | Tensor-parallel | `--tensor-parallel-size 4` | **TP=1** | single integrated GPU |
-| Chunked prefill | (default on) | **off** | hangs on RDNA ([vllm-project/vllm#5013][chunked]) |
+| Chunked prefill | (default on) | **default-on** (validated) | the historical RDNA hang ([vllm-project/vllm#5013][chunked]) did **not** reproduce on this build with `TRITON_ATTN` |
 | KV-cache dtype | bf16 | bf16 (no fp8 KV) | fp8 KV is CDNA-only |
 | Spec-decoding | DFlash (`Muse-Glimmer-30B-assistant`) | **deferred (v1 off)** | registry bug `DFlashMuseGlimmer…`; needs a patched fork |
 | Kernel | — | **≥ 6.16.9** (have 6.17) | fixes the "ROCm sees only ~15.5 GB" UMA bug ([ROCm/ROCm#5444][uma]) |
@@ -57,19 +57,25 @@ publishes gfx1151-codegen'd nightlies at
 **Precision — BF16 only.** RDNA 3.5 has no usable FP8 path in vLLM. The model's
 weights ship BF16 (~59 GB), and that is what we run — see the memory math below.
 
-**Attention — `FLASH_ATTN`, never AITER.** AITER (AMD's tuned attention/decoder
-kernels) is gated behind `get_cdna_version() > 2`, i.e. CDNA3+ / RDNA4 only. On
-gfx1151 it is silently absent; setting `VLLM_ROCM_USE_AITER=1` only makes vLLM
-fall back to broken emulation. We instead set
-`FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE` and pass `--attention-backend
-FLASH_ATTN` (the Triton-on-AMD path), with `TRITON_ATTN` as a documented
-fallback. This single env/flag pair is the heart of the RDNA adaptation.
+**Attention — `TRITON_ATTN`, never AITER (and not `FLASH_ATTN`).** AITER (AMD's
+tuned attention/decoder kernels) is gated behind `get_cdna_version() > 2`,
+i.e. CDNA3+ / RDNA4 only — on gfx1151 it is silently absent. The plan expected
+`FLASH_ATTN` (with `FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE`) to work, but the
+first real boot validated otherwise: this build logs `Using FlashAttention
+version None` and the profiling forward pass asserts `FlashAttention version
+not detected` — there is no flash-attn library codegen for RDNA 3.5.
+**`TRITON_ATTN`** (pure Triton attention kernels, via the ROCm-patched Triton
+from TheRock) is the working backend on gfx1151 and what
+`configs/serve-args.conf` pins. (Switching to it was the single change that
+took the server from crash-on-startup to serving.)
 
 **Tensor-parallel = 1.** Strix Halo is one integrated GPU sharing unified
 memory; there is nothing to shard across.
 
-**Chunked prefill off.** RDNA's prefill path hangs under chunked scheduling; we
-leave it off (its absence is asserted by the banned-flag test).
+**Chunked prefill on (default).** vLLM V1 defaults this on; the historical RDNA
+hang ([vllm-project/vllm#5013][chunked]) did **not** reproduce here with
+`TRITON_ATTN`, so we leave the default for throughput. We never pass the flag —
+V1's default-on is enough — so the banned-flag test still passes.
 
 **Speculative decoding deferred.** The DFlash assistant model hits a registry bug
 upstream (`DFlashMuseGlimmerAssistant`). It is a v1 non-goal; the closest working

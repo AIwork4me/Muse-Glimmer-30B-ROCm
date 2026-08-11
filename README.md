@@ -66,7 +66,7 @@ tool-calls use the vLLM path. See [`docs/adaptation.md`](docs/adaptation.md).
 |---|---|---|
 | Install | docker nightly | **source build** (`PYTORCH_ROCM_ARCH=gfx1151`) |
 | Precision | bf16 / fp8 | **bf16 only** (RDNA 3.5 has no FP8) |
-| Attention | `ROCM_AITER_FA` | **`FLASH_ATTN`** (AITER is CDNA3+/RDNA4-only) |
+| Attention | `ROCM_AITER_FA` | **`TRITON_ATTN`** (AITER is CDNA3+/RDNA4-only; FLASH_ATTN also fails — no gfx1151 codegen) |
 | TP | 4 | **1** (single iGPU) |
 | Chunked prefill | on | **off** (hangs on RDNA) |
 
@@ -89,5 +89,5 @@ Run `bash scripts/benchmark.sh` against a live server to populate this.
 
 ## Status
 
-vLLM source build ✅ · serve config ✅ · CI-safe tests ✅ · model fetch ✅ (parallel) ·
-live smoke/parser/benchmark — pending a model download + server run on the box.
+vLLM source build ✅ · serve (`TRITON_ATTN`) ✅ · live smoke + `muse_glimmer` parser tests ✅ ·
+model fetch ✅ (parallel) · CI-safe tests ✅ · benchmark → `docs/results/`.

@@ -6,7 +6,7 @@ def test_serve_args_encode_the_adaptations():
     args = open("configs/serve-args.conf").read()
     # must-haves
     assert "--dtype bfloat16" in args
-    assert "--attention-backend FLASH_ATTN" in args
+    assert "--attention-backend TRITON_ATTN" in args  # validated on gfx1151; FLASH_ATTN asserts "version not detected"
     assert "--tensor-parallel-size 1" in args
     assert "--tool-call-parser muse_glimmer" in args
     assert "--reasoning-parser muse_glimmer" in args
