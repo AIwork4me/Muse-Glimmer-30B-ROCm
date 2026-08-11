@@ -59,8 +59,10 @@ if [ "${WITH_MMProj:-0}" = "1" ]; then
 fi
 
 # 3. Serve. Text-focused quick-start; with WITH_MMProj=1 the vision projector is
-#    attached (depends on llama.cpp recognising the muse_glimmer architecture —
-#    see docs/troubleshooting.md if it rejects the GGUF).
+#    attached (llama.cpp has first-class muse_glimmer arch support, so it loads
+#    natively). Add -np <slots> (e.g. -np 16 -c 16384) to raise concurrent
+#    throughput — the default 4 slots plateau at ~22 tok/s (see
+#    docs/results/benchmark.md).
 echo "Serving on http://127.0.0.1:8080 ..."
 exec "$LLAMA/build/bin/llama-server" \
     -m "$DEST/$GGUF_FILE" "${MMPROJ_ARGS[@]}" \

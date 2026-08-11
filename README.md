@@ -73,21 +73,25 @@ tool-calls use the vLLM path. See [`docs/adaptation.md`](docs/adaptation.md).
 Full table with the *why* + memory math:
 [`docs/adaptation.md`](docs/adaptation.md).
 
-## Results
+## Results — vLLM (BF16) vs llama.cpp (Q4 K-quant)
 
-Muse-Glimmer-30B **BF16** on gfx1151 (Strix Halo), `TRITON_ATTN`, TP=1, 512 output tokens/request via `/v1/completions`:
+Muse-Glimmer-30B on gfx1151 (Strix Halo), GPU (HIP), `/v1/completions`, 512 output tokens/request:
 
-| Concurrency | agg tok/s | wall (s) | out tokens |
+| Concurrency | vLLM BF16 (tok/s) | llama.cpp Q4 (tok/s) | Q4 speedup |
 |---|---|---|---|
-| 1 | **4.2** | 121 | 512 |
-| 4 | **14.0** | 124 | 1,735 |
-| 16 | **40.8** | 133 | 5,439 |
+| 1 | 4.2 | **10.5** | 2.5× |
+| 4 | 14.0 | **21.3** | 1.5× |
+| 16 | 40.8 | **102.0** | 2.5× |
 
-~10× scaling from c=1→16 (continuous batching works on gfx1151). Single-stream
-~4 tok/s is the realistic chat speed for a 30B BF16 model on this iGPU (no AITER
-on RDNA 3.5). Full manifest + caveats: [`docs/results/benchmark.md`](docs/results/benchmark.md).
+llama.cpp Q4 is faster at every concurrency (~4× less memory traffic per token —
+decode is bandwidth-bound on this APU). vLLM's edge is features, not speed:
+native `muse_glimmer` reasoning + ATEM tool-call parsing, vision/multimodal,
+128K context, and **automatic** continuous batching (llama.cpp needs `-np <slots>`
+tuning to scale — its default 4 slots plateau at ~22 tok/s). Both produce correct
+inference (e.g. "17 × 24 → 408"). Full comparison, quality checks, feature
+matrix, and when-to-use-which: [`docs/results/benchmark.md`](docs/results/benchmark.md).
 
-Reproduce: `BASE=http://127.0.0.1:8000 bash scripts/benchmark.sh`.
+Reproduce: `BASE=http://127.0.0.1:<port> bash scripts/benchmark.sh` (8000 = vLLM, 8080 = llama.cpp).
 
 ## Docs
 
@@ -97,5 +101,5 @@ Reproduce: `BASE=http://127.0.0.1:8000 bash scripts/benchmark.sh`.
 
 ## Status
 
-vLLM source build ✅ · serve (`TRITON_ATTN`) ✅ · live smoke + `muse_glimmer` parser tests ✅ ·
-model fetch ✅ (parallel) · CI-safe tests ✅ · benchmark → `docs/results/`.
+vLLM (BF16, `TRITON_ATTN`) ✅ · llama.cpp GGUF (Q4 kquant) ✅ · live smoke + `muse_glimmer`
+parser tests ✅ · model fetch ✅ (parallel) · vLLM-vs-llama.cpp benchmark ✅ · CI-safe tests ✅.
