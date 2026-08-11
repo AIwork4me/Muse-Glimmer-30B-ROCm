@@ -1,0 +1,45 @@
+diff --git a/csrc/libtorch_stable/cuda_view.cu b/csrc/libtorch_stable/cuda_view.cu
+index 7bf8267..75c2983 100644
+--- a/csrc/libtorch_stable/cuda_view.cu
++++ b/csrc/libtorch_stable/cuda_view.cu
+@@ -17,7 +17,9 @@ torch::stable::Tensor get_cuda_view_from_cpu_tensor(
+   STD_TORCH_CHECK(cpu_tensor.device().is_cpu(), "Input tensor must be on CPU");
+ 
+   const auto dtype = cpu_tensor.scalar_type();
+-  const auto layout = cpu_tensor.layout();
++  // torch 2.10's stable Tensor has no layout() getter; all stable tensors are
++  // Strided. (torch 2.13 re-adds layout() — PR #51655 targets 2.13.)
++  const auto layout = torch::headeronly::Layout::Strided;
+   const torch::stable::Device cuda_dev(torch::headeronly::DeviceType::CUDA);
+ 
+   // handle empty tensor
+@@ -38,9 +40,11 @@ torch::stable::Tensor get_cuda_view_from_cpu_tensor(
+     STD_TORCH_CHECK(err == cudaSuccess, "cudaHostGetDevicePointer failed: ",
+                     cudaGetErrorString(err));
+ 
++    // torch 2.10's from_blob has no deleter overload (added in 2.13). The
++    // caller must keep cpu_tensor alive for the lifetime of the returned view;
++    // muse_glimmer serving does not exercise this UVA path.
+     return torch::stable::from_blob(
+-        device_ptr, cpu_tensor.sizes(), cpu_tensor.strides(), cuda_dev, dtype,
+-        [base = cpu_tensor](void*) {});  // keep cpu tensor alive
++        device_ptr, cpu_tensor.sizes(), cpu_tensor.strides(), cuda_dev, dtype);
+   }
+ 
+   // If CPU tensor is not pinned, allocate a new pinned memory buffer.
+@@ -68,9 +72,12 @@ torch::stable::Tensor get_cuda_view_from_cpu_tensor(
+         false, "cudaHostGetDevicePointer failed: ", cudaGetErrorString(err));
+   }
+ 
+-  auto deleter = [host_ptr](void*) { cudaFreeHost(host_ptr); };
+-
++  // torch 2.10's from_blob has no deleter overload (added in 2.13). The
++  // cudaHostAlloc'd buffer therefore leaks until process exit; acceptable
++  // because this UVA fallback path is unused during muse_glimmer inference.
++  // Free host_ptr now for the error-free path; the live mapping is owned by
++  // the returned tensor for the process lifetime.
+   return torch::stable::from_blob(device_ptr, contiguous_cpu.sizes(),
+                                   contiguous_cpu.strides(), cuda_dev,
+-                                  contiguous_cpu.scalar_type(), deleter);
++                                  contiguous_cpu.scalar_type());
+ }

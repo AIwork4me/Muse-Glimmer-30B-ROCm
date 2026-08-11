@@ -33,6 +33,14 @@ url = "https://rocm.nightlies.amd.com/v2/gfx1151/"
 [tool.uv.sources]
 torch = { index = "therock-gfx1151" }
 torchvision = { index = "therock-gfx1151" }
+# vLLM is NOT a uv-synced dependency: it is source-built into the venv by
+# scripts/01-build-vllm.sh (editable, --no-build-isolation) from PR #51655.
+# The mapping below documents provenance only — vllm is intentionally absent
+# from [project.dependencies so `uv sync` never tries to (re)build it in
+# isolation. After Task 3, ALL `uv run` invocations MUST pass --no-sync, or the
+# editable install will be wiped. Pinned: xianbaoqian/vllm @
+# 606a12cd701875012ffe78a54afd29f97b825dba (branch tiezhen/new-model-support).
+vllm = { path = "third_party/vllm", editable = true }
 
 [tool.pytest.ini_options]
 markers = [
