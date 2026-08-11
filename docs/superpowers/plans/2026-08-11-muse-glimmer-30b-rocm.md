@@ -20,6 +20,7 @@
 - vLLM comes from **PR #51655** (model code in no released wheel); build with `PYTORCH_ROCM_ARCH=gfx1151` and `FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE`.
 - TheRock torch index: `https://rocm.nightlies.amd.com/v2/gfx1151/`.
 - Every task ends with a commit. Tests that need the GPU are marked `@pytest.mark.gpu` and run locally (CI has no gfx1151).
+- vLLM is source-installed via `uv pip install -e --no-build-isolation` (Task 3) and is **not** in `pyproject.toml` (its HIP build can't be a normal wheel dep). After Task 1, don't change `pyproject.toml` in a way that re-syncs the env; use `uv run --no-sync` for serve/tests/benchmark invocations so the manual editable vLLM is never dropped.
 
 ---
 
