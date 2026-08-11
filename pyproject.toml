@@ -47,4 +47,8 @@ markers = [
     "gpu: requires a physical gfx1151 GPU",
     "server: requires a running vLLM server",
 ]
+# Confine collection to this project's tests/. Without this, pytest descends
+# into third_party/vllm (the source-built checkout) and fails collecting its
+# test suite (missing tblib, etc.).
+testpaths = ["tests"]
 addopts = "-q"

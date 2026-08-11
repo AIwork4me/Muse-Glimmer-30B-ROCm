@@ -1,0 +1,31 @@
+name: ci
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    # CI has no gfx1151, so this job runs only the no-GPU/no-server tests:
+    # script + config linting and the banned-adaptation-flag scan. GPU and
+    # server tests are marked `gpu`/`server` and run locally (scripts/03-*).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      # Validates pyproject resolves and the TheRock gfx1151 wheel installs
+      # (install does not require an AMD GPU; execution does). vLLM itself is
+      # source-built and not part of this sync — the no-GPU tests don't import it.
+      - name: Sync project
+        run: uv sync
+
+      - name: No-GPU tests (script/config lint + banned-flag scan)
+        run: uv run pytest -m "not gpu and not server" -v
