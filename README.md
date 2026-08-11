@@ -75,11 +75,19 @@ Full table with the *why* + memory math:
 
 ## Results
 
-| Engine | Precision | Concurrency | tok/s | peak VRAM |
-|---|---|---|---|---|
-| _to be filled from_ `docs/results/` | | | | |
+Muse-Glimmer-30B **BF16** on gfx1151 (Strix Halo), `TRITON_ATTN`, TP=1, 512 output tokens/request via `/v1/completions`:
 
-Run `bash scripts/benchmark.sh` against a live server to populate this.
+| Concurrency | agg tok/s | wall (s) | out tokens |
+|---|---|---|---|
+| 1 | **4.2** | 121 | 512 |
+| 4 | **14.0** | 124 | 1,735 |
+| 16 | **40.8** | 133 | 5,439 |
+
+~10× scaling from c=1→16 (continuous batching works on gfx1151). Single-stream
+~4 tok/s is the realistic chat speed for a 30B BF16 model on this iGPU (no AITER
+on RDNA 3.5). Full manifest + caveats: [`docs/results/benchmark.md`](docs/results/benchmark.md).
+
+Reproduce: `BASE=http://127.0.0.1:8000 bash scripts/benchmark.sh`.
 
 ## Docs
 
