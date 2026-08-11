@@ -1,0 +1,42 @@
+[project]
+name = "muse-glimmer-30b-rocm"
+version = "0.1.0"
+description = "Muse-Glimmer-30B on AMD gfx1151 (Strix Halo) via vLLM/ROCm"
+requires-python = "==3.12.*"
+dependencies = [
+    "torch==2.10.0+rocm7.13.0a20260513",
+    "torchvision==0.25.0+rocm7.13.0a20260513",
+    "numpy<2",
+    "huggingface_hub>=0.24",
+    "aiohttp",
+    "pytest",
+]
+
+[tool.uv]
+required-version = ">=0.4"
+# TheRock torch wheels pull a deep tree of index-specific transitive deps
+# (rocm[libraries] -> rocm-sdk-core + rocm-sdk-libraries-gfx1151, plus a
+# ROCm-patched triton). Those are transitive, and uv's [tool.uv.sources] index
+# mappings only apply to DIRECT project deps, so an `explicit = true` index
+# (brief's original shape) cannot satisfy them short of listing ~4 internal
+# ROCm packages as direct deps. unsafe-best-match lets each package route to
+# the correct index by version constraint instead: torch's +rocm pin, the rocm
+# runtime and triton resolve only from the TheRock index, while numpy<2,
+# huggingface_hub, aiohttp and pytest resolve from PyPI. Acceptable here: both
+# indexes are trusted (AMD official + PyPI).
+index-strategy = "unsafe-best-match"
+
+[[tool.uv.index]]
+name = "therock-gfx1151"
+url = "https://rocm.nightlies.amd.com/v2/gfx1151/"
+
+[tool.uv.sources]
+torch = { index = "therock-gfx1151" }
+torchvision = { index = "therock-gfx1151" }
+
+[tool.pytest.ini_options]
+markers = [
+    "gpu: requires a physical gfx1151 GPU",
+    "server: requires a running vLLM server",
+]
+addopts = "-q"
