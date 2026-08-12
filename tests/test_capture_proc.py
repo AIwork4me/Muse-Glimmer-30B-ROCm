@@ -38,3 +38,26 @@ def test_scrape_metrics_acceptance():
     assert d["accepted_draft_tokens"] == 312.0
     assert d["draft_tokens"] == 400.0
     assert abs(d["acceptance_rate"] - 312.0 / 400.0) < 1e-9
+
+
+def test_scrape_metrics_empty():
+    """Regression test: absent counters should return None values without raising."""
+    d = scrape_metrics("")
+    assert d["accepted_draft_tokens"] is None
+    assert d["draft_tokens"] is None
+    assert d["avg_accepted_per_step"] is None
+    assert "acceptance_rate" not in d
+
+
+def test_scrape_metrics_labeled():
+    """Prometheus metrics commonly have labels like {model=\"x\"}. Regex should tolerate them."""
+    LABELED = """
+# HELP llama_speculative_accepted_draft_tokens_total ...
+llama_speculative_accepted_draft_tokens_total{model="llama-3-8b"} 312.0
+llama_speculative_draft_tokens_total{model="llama-3-8b"} 400.0
+llama_speculative_avg_accepted{model="llama-3-8b"} 2.4
+"""
+    d = scrape_metrics(LABELED)
+    assert d["accepted_draft_tokens"] == 312.0
+    assert d["draft_tokens"] == 400.0
+    assert abs(d["acceptance_rate"] - 312.0 / 400.0) < 1e-9

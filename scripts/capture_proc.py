@@ -31,10 +31,8 @@ def parse_rocm_smi_power(json_text):
 
 def scrape_metrics(text):
     """Pull speculative-decoding counters from llama-server /metrics (Prometheus)."""
-    vals = {}
-
     def grab(name):
-        m = re.search(rf"^{name}\s+([0-9.eE+-]+)", text, re.M)
+        m = re.search(rf"^{name}(?:\{{[^}}]*\}})?\s+([0-9.eE+-]+)", text, re.M)
         return float(m.group(1)) if m else None
 
     accepted = grab("llama_speculative_accepted_draft_tokens_total")
@@ -58,10 +56,13 @@ if __name__ == "__main__":
     import subprocess
     mode = sys.argv[1] if len(sys.argv) > 1 else "status"
     if mode == "status":
-        try:
-            print(json.dumps(parse_proc_status(open(f"/proc/{sys.argv[2]}/status").read())))
-        except OSError as e:
-            print(json.dumps({"error": str(e)}))
+        if len(sys.argv) < 3:
+            print(json.dumps({"error": "missing pid argument"}))
+        else:
+            try:
+                print(json.dumps(parse_proc_status(open(f"/proc/{sys.argv[2]}/status").read())))
+            except OSError as e:
+                print(json.dumps({"error": str(e)}))
     elif mode == "power":
         txt = sys.stdin.read() or subprocess.run(
             ["rocm-smi", "--showpower", "--showtemp", "--json"],
