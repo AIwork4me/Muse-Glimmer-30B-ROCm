@@ -7,6 +7,11 @@
 # worth documenting. We compare the `content` field of the chat-completions
 # response from two servers (baseline vs +DFlash) started with identical flags.
 #
+# IMPORTANT: the DFlash server MUST launch with `--spec-type draft-dflash` so
+# spec-decoding is actually engaged (llama-server's --spec-type defaults to
+# `none`, which would load the draft model but never draft — making the
+# equivalence check trivially pass). --spec-draft-n-max 16 = DFlash block_size.
+#
 # Uses port 8090 (cells use 8080) so it can coexist with an unrelated run, but
 # in practice it should be invoked when NO cell server is holding VRAM, since
 # two 17gb models side-by-side on a 32 GiB card can OOM.
@@ -24,7 +29,7 @@ get_content() { # $1 = extra server args
     | python3 -c "import sys,json;print(json.load(sys.stdin)['choices'][0]['message']['content'])"
 }
 BASE=$(get_content "")
-DF=$(get_content "-md models/dflash-kquant.gguf -ngld 99")
+DF=$(get_content "-md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 16")
 python3 - "$BASE" "$DF" <<'PY'
 import sys
 b, d = sys.argv[1], sys.argv[2]
