@@ -97,7 +97,7 @@ It is **pathologically slow** — verified, not a fluke:
   is DFlash-specific.
 
 Full evidence + write-up:
-[`docs/results/benchmark.md` — c=16 + DFlash: do not use](docs/results/benchmark.md#c16--dflash-do-not-use).
+[`docs/results/benchmark.md` — c=16 + DFlash: do not use](docs/results/benchmark.md#c16-dflash-do-not-use).
 Troubleshooting entries: [dflash-c16-pathological](docs/troubleshooting.md#dflash-c16-pathological),
 [dflash-silent-noop](docs/troubleshooting.md#dflash-silent-noop),
 [memory-footprint-apu](docs/troubleshooting.md#memory-footprint-apu).
@@ -117,7 +117,7 @@ quantized drafter, llama.cpp):
 gfx1151 sits **between the M5 Max and the RTX 5090** — credible for a 50 TOPS
 NPU/iGPU-class part. Byte-equivalence PASS (greedy spec-decode is exact: both
 baseline and DFlash emit `391` for `17 × 23`). See
-[`docs/results/benchmark.md` — Study 1](docs/results/benchmark.md#study-1--dflash-anchor-greedy-batch-1--meta-comparable).
+[`docs/results/benchmark.md` — Study 1](docs/results/benchmark.md#study-1-dflash-anchor-greedy-batch-1-meta-comparable).
 
 ---
 

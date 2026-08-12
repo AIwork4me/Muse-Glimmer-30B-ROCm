@@ -125,7 +125,7 @@ process with its exact flags recorded in the cell JSON.
 > `--spec-type draft-dflash --spec-draft-n-max 16`. `n_max=16` is the measured
 > sweet spot (it equals the DFlash block_size); n_max `3 / 8 / 16 / 32` →
 > 1.14× / 1.51× / 1.60× / 1.60×. See
-> [METHODOLOGY.md §8](METHODOLOGY.md#8-dflash-enablement--the-silent-no-op-gotcha)
+> [METHODOLOGY.md §8](METHODOLOGY.md#8-dflash-enablement-the-silent-no-op-gotcha)
 > and [troubleshooting.md#dflash-silent-noop](../troubleshooting.md#dflash-silent-noop).
 
 ## ⚠️ c=16 + DFlash: do not use
@@ -169,7 +169,7 @@ missing data, they are *findings*.
 
 > Always: when DFlash is on, pass `--spec-type draft-dflash --spec-draft-n-max 16`
 > (else it silently does nothing). See also
-> [README.md — Best practices / Pitfalls](../../README.md#best-practices--pitfalls--read-this-before-using-dflash-or-c16).
+> [README.md — Best practices / Pitfalls](../../README.md#best-practices-pitfalls-read-this-before-using-dflash-or-c16).
 
 ---
 
@@ -233,20 +233,20 @@ compare the speedup ratios here to Meta's table.
 | 17gb | 4 | baseline | 15.60 | 1.144 | 0.1778 | 27.24 | — |
 | 17gb | 4 | DFlash | 27.30 | 1.247 | 0.1066 | 33.44 | 0.184 |
 | 17gb | 16 | baseline | 34.47 | 3.225 | 0.1706 | 30.27 | — |
-| 17gb | 16 | DFlash | ⚠ **PATHOLOGICAL — did not complete** (see [warning](#c16--dflash-do-not-use)) | — | — | — | — |
+| 17gb | 16 | DFlash | ⚠ **PATHOLOGICAL — did not complete** (see [warning](#c16-dflash-do-not-use)) | — | — | — | — |
 | dynamic | 1 | baseline | 9.09 | 0.604 | 0.1091 | 27.16 | — |
 | dynamic | 1 | DFlash | 19.89 | 0.608 | 0.0521 | 30.04 | 0.194 |
 | dynamic | 4 | baseline | 20.90 | 1.274 | 0.1809 | 29.18 | — |
 | dynamic | 4 | DFlash | 28.22 | 1.343 | 0.1212 | 34.88 | 0.192 |
 | dynamic | 16 | baseline | 31.05 | 3.366 | 0.2366 | 38.41 | — |
-| dynamic | 16 | DFlash | ⚠ **PATHOLOGICAL — did not complete** (see [warning](#c16--dflash-do-not-use)) | — | — | — | — |
+| dynamic | 16 | DFlash | ⚠ **PATHOLOGICAL — did not complete** (see [warning](#c16-dflash-do-not-use)) | — | — | — | — |
 
 **Reading the table:**
 
 - **DFlash speedup shrinks as concurrency rises.** At c=1 it is still ~2.1–2.4×
-  (matching Study 1). At c=4 it falls to ~1.35× (17gb) and ~1.35× (dynamic) on
+  (matching Study 1). At c=4 it falls to ~1.75× (17gb) and ~1.35× (dynamic) on
   aggregate throughput. At c=16, DFlash is **pathological** — see the warning
-  block above and [`METHODOLOGY.md §6`](METHODOLOGY.md#6-the-c16--dflash-pathology).
+  block above and [`METHODOLOGY.md §6`](METHODOLOGY.md#6-the-c16-dflash-pathology).
 - **c=16 baselines are the throughput winners** (17gb 34.5, dynamic 31.0 tok/s)
   — and you keep them by leaving DFlash **off**.
 - **Aggregate vs per-request.** Aggregate tok/s (`Σ tokens ÷ max per-request
@@ -281,7 +281,7 @@ answers, and measures its memory delta vs text-only.
 - **VRAM ≈ 1093 MiB across all cells** — the carve-out counter only ticks for
   carve-out-path allocations; the mmap'd GGUF and unified-host-visible GPU
   buffers don't increment it. **Trust VmPeak, not rocm-smi** — see
-  [`METHODOLOGY.md §5`](METHODOLOGY.md#5-the-memory-methodology--trust-vmpeak-not-rocm-smi-or-vmhwm).
+  [`METHODOLOGY.md §5`](METHODOLOGY.md#5-the-memory-methodology-trust-vmpeak-not-rocm-smi-or-vmhwm).
 
 ## Memory table — the full footprint picture (VmPeak)
 

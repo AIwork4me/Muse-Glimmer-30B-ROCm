@@ -153,6 +153,20 @@ These come from the DFlash + full benchmark matrix work
 [`docs/results/benchmark.md`](results/benchmark.md)). The matrix was measured on
 the llama.cpp path; vLLM still has DFlash off (registry bug).
 
+## dflash-byte-equivalence
+
+**Symptom:** under greedy decoding (`temp=0 seed=0`), DFlash output differs from
+the baseline (e.g., different tokens for the same prompt).
+
+**Cause:** spec-decode must produce **byte-identical** output to the baseline
+when both use greedy sampling. A mismatch indicates a bug in the DFlash
+implementation or the harness.
+
+**Fix:** verify with `scripts/check_dflash_equiv.sh`, which runs both engines
+on `17 × 23` and checks that both emit `391`. The validated runs pass this
+check (see [`docs/results/benchmark.md` — Study 1](results/benchmark.md#study-1-dflash-anchor-greedy-batch-1-meta-comparable)).
+If you see a mismatch, file a bug against llama.cpp or the harness.
+
 ## dflash-silent-noop
 
 **Symptom:** you launch `llama-server` with `-md models/dflash-kquant.gguf -ngld
