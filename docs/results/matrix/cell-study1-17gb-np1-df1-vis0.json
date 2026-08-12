@@ -5,29 +5,29 @@
   "vision": false,
   "np": 1,
   "metrics": {
-    "agg_tok_s": 22.868518133468925,
+    "agg_tok_s": 23.03348428358892,
     "total_tokens": 1536,
-    "wall_s": 67.1665733230002,
-    "ttft_p50": 0.4775895220009261,
-    "ttft_p90": 0.4801569040009781,
-    "tpot_median": 0.04861776148824064,
-    "agg_tok_s_min": 22.78251987851095,
-    "agg_tok_s_max": 23.308308503620495,
+    "wall_s": 66.68552534600167,
+    "ttft_p50": 0.4746372399986285,
+    "ttft_p90": 0.4835585675009497,
+    "tpot_median": 0.04820838409018595,
+    "agg_tok_s_min": 22.913692339648158,
+    "agg_tok_s_max": 23.39979076765323,
     "reps": 3,
     "finish_reason_dist": {
       "length": 18
     }
   },
   "mem": {
-    "VmPeak_kib": 28096120,
-    "VmPeak_gib": 26.79,
-    "VmHWM_kib": 2143452,
+    "VmPeak_kib": 28030588,
+    "VmPeak_gib": 26.73,
+    "VmHWM_kib": 2143476,
     "VmHWM_gib": 2.04,
-    "VmRSS_kib": 2143452,
+    "VmRSS_kib": 2143476,
     "VmRSS_gib": 2.04,
     "RssShmem_kib": 65536,
     "RssShmem_gib": 0.06,
-    "vram_used_mib": 1084.4,
+    "vram_used_mib": 1084.6,
     "vram_total_mib": 32768.0
   },
   "acceptance": {
@@ -39,7 +39,7 @@
   "acceptance_source": "log",
   "power_temp": {
     "power_w": null,
-    "temp_c": 58.0
+    "temp_c": 59.0
   },
   "llama_log_mem": "",
   "manifest": {

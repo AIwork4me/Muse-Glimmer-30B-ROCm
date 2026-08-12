@@ -1,33 +1,33 @@
 {
   "study": "study1",
-  "weight": "17gb",
+  "weight": "dynamic",
   "dflash": false,
   "vision": false,
   "np": 1,
   "metrics": {
-    "agg_tok_s": 10.484134416231438,
+    "agg_tok_s": 9.136038347143346,
     "total_tokens": 1536,
-    "wall_s": 146.50708766400203,
-    "ttft_p50": 0.4595633070002805,
-    "ttft_p90": 0.4700875995004026,
-    "tpot_median": 0.09418202581763777,
-    "agg_tok_s_min": 10.479402232034678,
-    "agg_tok_s_max": 10.509101333708124,
+    "wall_s": 168.12538888699783,
+    "ttft_p50": 0.4862136114988971,
+    "ttft_p90": 0.49262808749881515,
+    "tpot_median": 0.10820263029411709,
+    "agg_tok_s_min": 9.123554685414092,
+    "agg_tok_s_max": 9.136348090010706,
     "reps": 3,
     "finish_reason_dist": {
       "length": 18
     }
   },
   "mem": {
-    "VmPeak_kib": 25075384,
-    "VmPeak_gib": 23.91,
-    "VmHWM_kib": 1443592,
-    "VmHWM_gib": 1.38,
-    "VmRSS_kib": 1443592,
-    "VmRSS_gib": 1.38,
+    "VmPeak_kib": 27859428,
+    "VmPeak_gib": 26.57,
+    "VmHWM_kib": 1396864,
+    "VmHWM_gib": 1.33,
+    "VmRSS_kib": 1396864,
+    "VmRSS_gib": 1.33,
     "RssShmem_kib": 65536,
     "RssShmem_gib": 0.06,
-    "vram_used_mib": 1084.0,
+    "vram_used_mib": 1083.9,
     "vram_total_mib": 32768.0
   },
   "acceptance": {
@@ -38,11 +38,11 @@
   "acceptance_source": "metrics",
   "power_temp": {
     "power_w": null,
-    "temp_c": 63.0
+    "temp_c": 58.0
   },
   "llama_log_mem": "",
   "manifest": {
-    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 0 --seed 0 --metrics --port 8080 --host 127.0.0.1",
+    "flags": "-m models/muse-glimmer-30B-kquant-dynamic.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 0 --seed 0 --metrics --port 8080 --host 127.0.0.1",
     "seed": 0,
     "reps": 3,
     "build": "0b1bad1",
