@@ -25,7 +25,7 @@ released wheel, which is the root reason for most of the deltas below.
 | Tensor-parallel | `--tensor-parallel-size 4` | **TP=1** | single integrated GPU |
 | Chunked prefill | (default on) | **default-on** (validated) | the historical RDNA hang ([vllm-project/vllm#5013][chunked]) did **not** reproduce on this build with `TRITON_ATTN` |
 | KV-cache dtype | bf16 | bf16 (no fp8 KV) | fp8 KV is CDNA-only |
-| Spec-decoding | DFlash (`Muse-Glimmer-30B-assistant`) | **deferred (v1 off)** | registry bug `DFlashMuseGlimmer…`; needs a patched fork |
+| Spec-decoding | DFlash (`Muse-Glimmer-30B-assistant`) | **validated on llama.cpp** (vLLM still blocked) | llama.cpp path: **2.20× (17gb) / 2.39× (dynamic)** at greedy batch 1, draft acceptance 0.233 / 0.237, byte-identical output — see [`docs/results/benchmark.md`](results/benchmark.md#study-1--dflash-anchor-greedy-batch-1--meta-comparable). vLLM path still blocked by the registry bug (`DFlashMuseGlimmer…`). **Caveat: do NOT combine DFlash with `-np 16` — pathological (>1000× slower per-request); c=16 baseline is fine. Always pass `--spec-type draft-dflash --spec-draft-n-max 16` or DFlash silently no-ops.** |
 | Kernel | — | **≥ 6.16.9** (have 6.17) | fixes the "ROCm sees only ~15.5 GB" UMA bug ([ROCm/ROCm#5444][uma]) |
 
 [recipe]: https://github.com/vllm-project/recipes/pull/776
@@ -77,9 +77,27 @@ hang ([vllm-project/vllm#5013][chunked]) did **not** reproduce here with
 `TRITON_ATTN`, so we leave the default for throughput. We never pass the flag —
 V1's default-on is enough — so the banned-flag test still passes.
 
-**Speculative decoding deferred.** The DFlash assistant model hits a registry bug
-upstream (`DFlashMuseGlimmerAssistant`). It is a v1 non-goal; the closest working
-precedent needed a patched fork.
+**Speculative decoding — validated on llama.cpp, still blocked on vLLM.** The
+DFlash assistant model hits a registry bug in vLLM
+(`DFlashMuseGlimmerAssistant`), so the **vLLM path** keeps DFlash off. But the
+**llama.cpp path** runs DFlash cleanly and delivers a measured **2.20× speedup
+on 17gb (23.03 vs 10.48 tok/s) and 2.39× on dynamic (21.82 vs 9.14 tok/s)** at
+greedy batch 1, with draft acceptance 0.233 / 0.237 and **byte-identical output**
+under greedy spec-decode. gfx1151 lands between Meta's M5 Max (1.8×) and RTX 5090
+(3.1×) — see [`docs/results/benchmark.md`](results/benchmark.md#study-1--dflash-anchor-greedy-batch-1--meta-comparable).
+
+Two operational gotchas (documented in
+[`docs/troubleshooting.md`](troubleshooting.md)):
+
+1. **DFlash is a silent no-op without `--spec-type draft-dflash`.** `llama-server`'s
+   `--spec-type` defaults to `none`, so `-md dflash.gguf -ngld 99` alone loads the
+   drafter but never drafts (1.0×). Always pass `--spec-type draft-dflash
+   --spec-draft-n-max 16` (n_max=16 is the measured sweet spot = DFlash block_size).
+2. **Do NOT combine DFlash with `-np 16`.** It is pathologically slow — >1000×
+   slower per-request than the c=16 baseline (a 16×48 batch completed 0 of 768
+   tokens in 28 s; the dynamic REPS=5 cell was aborted after 5 h 16 m at 0.18 %
+   acceptance). c=16 baseline is fine (31–34 tok/s); the pathology is
+   DFlash-specific. Best practice: DFlash on for c ≤ 4, off for c ≥ 8.
 
 **Kernel ≥ 6.16.9.** Older kernels expose only ~15.5 GB of the unified pool to
 ROCm (a KFD/HSA UMA-handling bug). 6.16.9 fixes it; this host runs 6.17.

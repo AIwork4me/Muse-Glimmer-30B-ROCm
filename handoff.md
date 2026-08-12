@@ -1,8 +1,14 @@
 # Handoff — Muse-Glimmer-30B-ROCm
 
-**Status as of 2026-08-12: complete.** Both inference paths are implemented,
+**Status as of 2026-08-13: complete (master) + DFlash/vision matrix complete
+(`feat/llamacpp-dflash-benchmark`).** Both inference paths are implemented,
 validated on real gfx1151 hardware, benchmarked head-to-head, and committed to
-`master`. All 10 tasks in the implementation plan are done.
+`master`. The v1-deferred items — **DFlash speculative decoding** and **vision
+via `--mmproj`** — are now validated on the llama.cpp path on branch
+`feat/llamacpp-dflash-benchmark`, with a 3-study benchmark matrix
+(Study 1 / 2 / 3) committed as immutable raw per-cell JSON
+(`docs/results/matrix/cell-*.json`). **ROCm 7.14.0 remains a separate, gated
+Part 2 plan** — see §8.
 
 This document is the fast-path orientation for anyone picking the project up.
 Authoritative details live in the linked docs; this is the map.
@@ -41,6 +47,17 @@ token; decode is bandwidth-bound on the APU). **vLLM's edge is features**, not
 speed: native `muse_glimmer` reasoning + ATEM tool parsers, vision/multimodal,
 128K context, automatic batching. Both produce correct inference (e.g.
 *"17 × 24 → 408"*). Full comparison: [`docs/results/benchmark.md`](docs/results/benchmark.md).
+
+### DFlash + vision (new this branch) — one-line summary
+
+| Result | Number | Where |
+|---|---|---|
+| DFlash speedup @ greedy batch 1 (17gb) | **2.20×** (10.48 → 23.03 tok/s), acceptance 0.233 | [Study 1](docs/results/benchmark.md#study-1--dflash-anchor-greedy-batch-1--meta-comparable) |
+| DFlash speedup @ greedy batch 1 (dynamic) | **2.39×** (9.14 → 21.82 tok/s), acceptance 0.237 | Study 1 |
+| vs Meta anchors | RTX 5090 3.1× / M5 Max 1.8× → **gfx1151 sits between** | Study 1 |
+| Byte-equivalence (greedy spec-decode exactness) | **PASS** (both emit `391` for `17 × 23`) | [METHODOLOGY §9](docs/results/METHODOLOGY.md#9-byte-equivalence-greedy-spec-decode-exactness) |
+| Vision via `--mmproj` | loads + answers; **+2–3 GiB VmPeak** vs text-only (≈ Meta's ~+2 GB) | [Study 3](docs/results/benchmark.md#study-3--vision-axis-temp-10---mmproj-test-image) |
+| **⚠ c=16 + DFlash** | **pathological — do not use** (>1000× slower per-request) | [warning](docs/results/benchmark.md#c16--dflash-do-not-use) |
 
 ---
 
@@ -99,6 +116,9 @@ in `docs/troubleshooting.md`; the short version:
    per-chunk → ~5–16 MiB/s (~3 h for the weights). `HF_XET_HIGH_PERFORMANCE`
    401s through the mirror (CAS not proxied); `hf_transfer` is a no-op on
    huggingface_hub ≥1.27. Set `USE_HF_DOWNLOAD=1` for the stock tool.
+   **DFlash + mmproj GGUFs are Xet-backed** — fetch them **direct from
+   huggingface.co with `HF_HUB_DISABLE_XET=1`** (the mirror can't proxy Xet's
+   CAS). See [troubleshooting.md#dflash-mmproj-xet](docs/troubleshooting.md#dflash-mmproj-xet).
 
 4. **Chunked prefill is fine.** vLLM V1 defaults it ON; the historical RDNA hang
    ([vllm-project/vllm#5013](https://github.com/vllm-project/vllm/issues/5013))
@@ -111,13 +131,33 @@ in `docs/troubleshooting.md`; the short version:
 6. **`rocm-smi` VRAM is misleading on Strix Halo.** It reports only the ~32 GiB
    *dedicated carve-out* (and ~1 GiB "used"). The real footprint is unified memory
    (vLLM sees an 80 GiB pool: 56.5 GiB weights + 13.6 GiB KV). llama.cpp's GPU
-   buffers don't increment the carve-out counter either. Trust vLLM's startup
-   accounting, not `rocm-smi --showmeminfo vram`.
+   buffers don't increment the carve-out counter either, and `/proc` `VmHWM`
+   undercounts too (mmap + GPU offload). **Trust VmPeak** (~24–32 GiB on the
+   matrix). See [troubleshooting.md#memory-footprint-apu](docs/troubleshooting.md#memory-footprint-apu)
+   + [`docs/results/METHODOLOGY.md §5`](docs/results/METHODOLOGY.md#5-the-memory-methodology--trust-vmpeak-not-rocm-smi-or-vmhwm).
 
 7. **Muse-Glimmer is a reasoning model.** It emits chain-of-thought in the
    `reasoning` channel *first*, then the answer in `content`. Tests/clients need
    enough `max_tokens` (≥~300) to finish reasoning and produce `content`; at
    `max_tokens=16` you get `finish_reason=length` and empty content.
+   `reasoning_strength` (`low`/`medium`/`high`/`xhigh`, default `high`) controls
+   thinking length; it **cannot** be switched off (`--reasoning off` is a no-op).
+   See [troubleshooting.md#reasoning-length](docs/troubleshooting.md#reasoning-length).
+
+8. **DFlash is a silent no-op without `--spec-type draft-dflash`.** `llama-server`'s
+   `--spec-type` defaults to `none`; `-md dflash.gguf -ngld 99` alone loads the
+   drafter but never drafts (1.0×, null acceptance). Always pass
+   `--spec-type draft-dflash --spec-draft-n-max 16` (n_max=16 is the measured
+   sweet spot). See [troubleshooting.md#dflash-silent-noop](docs/troubleshooting.md#dflash-silent-noop).
+
+9. **⚠ DFlash @ c=16 is pathological — do not use.** >1000× slower per-request
+   than the c=16 baseline (a 16×48 batch completed 0 of 768 tokens in 28 s;
+   the dynamic REPS=5 cell was aborted after 5 h 16 m at 0.18 % acceptance).
+   c=16 baseline is fine (31–34 tok/s); the pathology is DFlash-specific.
+   DFlash is a win at c ≤ 4 (best at c=1: ~2.2×). Best-practice table +
+   evidence: [`README.md`](README.md#best-practices--pitfalls--read-this-before-using-dflash-or-c16),
+   [`docs/results/benchmark.md`](docs/results/benchmark.md#c16--dflash-do-not-use),
+   [troubleshooting.md#dflash-c16-pathological](docs/troubleshooting.md#dflash-c16-pathological).
 
 ---
 
@@ -131,10 +171,17 @@ in `docs/troubleshooting.md`; the short version:
 | `muse_glimmer` reasoning + ATEM tool parsers | live `tests/test_parsers.py` green |
 | Chat round-trip | live `tests/test_smoke.py` green |
 | llama.cpp runs the GGUF on GPU | correct output; ~8% CPU across 32 cores during gen (GPU-bound) |
-| Throughput | benchmark JSON in `docs/results/`; tables in `docs/results/benchmark.md` |
+| Throughput (v1) | benchmark JSON in `docs/results/`; tables in `docs/results/benchmark.md` |
+| **DFlash speedup @ greedy batch 1** | Study 1 cell JSONs: 17gb 2.20× (10.48→23.03), dynamic 2.39× (9.14→21.82); acceptance 0.233 / 0.237 |
+| **DFlash byte-equivalence** | `scripts/check_dflash_equiv.sh` PASS — both emit `'391'` for `17 × 23` |
+| **Throughput under load (Study 2)** | 12 cell JSONs (10 completed + 2 `pathological:true` c=16 DFlash non-completions) |
+| **Vision via `--mmproj` (Study 3)** | 5 cell JSONs; mmproj loads, answers; +2–3 GiB VmPeak ≈ Meta's ~+2 GB |
+| **llama-bench cross-check** | `matrix/llama-bench.json` tg128: 17gb 10.73 / dynamic 9.28 vs Study 1 baseline 10.48 / 9.14 (within 2.4 %) |
 
 Full suite on `master`: **13 passed, 5 skipped** (4 server tests skip when no
 server is running; 1 = shellcheck not installed locally — CI runs it).
+On `feat/llamacpp-dflash-benchmark`: the GGUF-bench harness adds CI-safe tests
+under `tests/test_gguf_bench.py` (config validation, JSON schema, renderer).
 
 ---
 
@@ -196,17 +243,27 @@ muse-rocm/
 
 These are explicit non-goals or deferred items, not bugs:
 
-- **DFlash speculative decoding** — upstream registry bug (`DFlashMuseGlimmer…`);
-  needs a patched fork. The drafter GGUF (`dflash-kquant.gguf`) is available if
-  someone tries. Documented in `docs/adaptation.md`.
-- **Vision via llama.cpp** — `mmproj-kquant.gguf` exists and `gguf-quickstart.sh`
-  supports `WITH_MMProj=1`, but the live vision path was not benchmarked.
-  vLLM's vision path is native and untested-for-throughput too (only text here).
-- **ROCm 7.14.0 path** — gfx1151 is "officially" supported at 7.14.0; this project
-  uses 7.2.1 (community-verified). 7.14.0 is documented as an alternative
-  (`docs/strix-halo-setup.md`), not tested.
-- **No git remote / PR** — the repo is local-only (branch: `master`). If a GitHub
-  remote is added, the `ci.yml` workflow will run the no-GPU tests on push.
+- **DFlash speculative decoding — DONE on llama.cpp, still blocked on vLLM.**
+  The llama.cpp path is validated (2.20× / 2.39× at greedy batch 1; see
+  [`docs/results/benchmark.md` Study 1](docs/results/benchmark.md#study-1--dflash-anchor-greedy-batch-1--meta-comparable)).
+  The **vLLM path** is still blocked by the upstream registry bug
+  (`DFlashMuseGlimmerAssistant`); the drafter GGUF is on disk if someone tries a
+  patched fork. **Pitfall documented: do NOT combine DFlash with c=16 —
+  pathological.** See [`README.md` best practices](README.md#best-practices--pitfalls--read-this-before-using-dflash-or-c16).
+- **Vision via llama.cpp — DONE.** Study 3 (5 cells) confirms `--mmproj` loads +
+  answers, with a memory delta matching Meta's envelope. See
+  [`docs/results/benchmark.md` Study 3](docs/results/benchmark.md#study-3--vision-axis-temp-10---mmproj-test-image).
+- **ROCm 7.14.0 path — separate, gated Part 2 plan.** gfx1151 is "officially"
+  supported at 7.14.0; this project uses 7.2.1 (community-verified). 7.14.0 is
+  documented as an alternative (`docs/strix-halo-setup.md`). The 7.2.1 matrix
+  data is committed and immutable on `feat/llamacpp-dflash-benchmark`, so any
+  7.14.0 work begins with a feasibility probe (can it install side-by-side on
+  this host without removing 7.2.1?) and then re-runs the identical matrix with
+  only ROCm differing. See spec §9 (P-D).
+- **No git remote / PR** — the repo is local-only. `master` holds the v1
+  deliverable; `feat/llamacpp-dflash-benchmark` holds the DFlash + vision matrix
+  (this branch). If a GitHub remote is added, the `ci.yml` workflow will run the
+  no-GPU tests on push.
 - **GGUF live build is reproducible but slow to re-do** — `gguf-quickstart.sh`
   clones llama.cpp from GitHub (slow from this host) + ~15 min cmake build + ~16 GiB
   GGUF. The artifacts are already on disk, so this only matters on a fresh clone.
@@ -214,9 +271,12 @@ These are explicit non-goals or deferred items, not bugs:
 
 ---
 
-## 9. Commit history (on `master`)
+## 9. Commit history
+
+On `master` (v1):
 
 ```
+5884b11 docs: add handoff.md (project orientation for future work)
 e57cec8 feat: validate llama.cpp GGUF path + vLLM-vs-llama.cpp comparison
 36df79c docs(plan): note the uv --no-sync global constraint
 54dbf5c docs: validated gfx1151 benchmark results + env manifest
@@ -233,8 +293,35 @@ bbd415f ci: no-GPU script/config lint tests + workflow
 5cf4a8b feat: uv project scaffolding with TheRock gfx1151 torch
 ```
 
-Spec: `docs/superpowers/specs/2026-08-11-muse-glimmer-30b-rocm-design.md`.
-Plan: `docs/superpowers/plans/2026-08-11-muse-glimmer-30b-rocm.md`.
+On `feat/llamacpp-dflash-benchmark` (DFlash + vision matrix; see
+`git log master..HEAD`):
+
+```
+13fdac6 data(bench): complete Study 2 (incl. c=16) + Study 3 on ROCm 7.2.1
+046c9ea data(bench): Study 3 vision cells (5/5) on ROCm 7.2.1
+5585350 data(bench): Study 2 throughput-under-load cells (9/12; 3 c=16 pending)
+6248e53 fix(bench): bump sock_read to 1200s for c=16 tail latency
+9b37b4e fix(bench): lift aiohttp 5min default timeout for c=16 cells + render study3
+290e596 fix(bench): check_dflash_equiv.sh must enable spec-decoding
+4ebaa0d data(bench): Study 1 (Meta-comparable DFlash anchor) on ROCm 7.2.1
+51c2149 fix(bench): engage DFlash spec decoding + capture acceptance from server log
+4195f16 feat(bench): matrix driver (randomized cell order) + markdown render
+9b1e4f2 fix(bench): review round 1 — scrape_metrics avg, include_usage test, cell robustness
+49754c3 feat(bench): single-cell orchestrator (gguf-bench-cell.sh) + P0 validation
+8fba282 feat(bench): streaming chat/completions client + TTFT/TPOT + prompt loop
+45bc2fe fix(bench): enhance GGUF config parser + assertions
+67f744a feat(bench): per-study config files (study1/2/3) + validation tests
+eb084d3 fix(bench): render_matrix review findings - study2 test + study1 baseline filter + cleanup
+8726ab8 data(bench): GGUF manifest (4 weights on disk)
+f14d6c8 feat(bench): render_matrix JSON->markdown (TDD)
+1ce437b feat(bench): capture_proc parsers (TDD) - spec acceptance + /metrics + /proc
+4b271b3 feat(bench): bench_client pure metric functions (TDD)
+<task-13 commit> docs(bench): METHODOLOGY + Study 1/2/3 results, c=16 warning, adaptation/troubleshooting updates
+```
+
+Spec (v1): `docs/superpowers/specs/2026-08-11-muse-glimmer-30b-rocm-design.md`.
+Spec (v2 DFlash): `docs/superpowers/specs/2026-08-12-llamacpp-dflash-benchmark-design.md`.
+Plan (v2): `docs/superpowers/plans/2026-08-12-llamacpp-dflash-benchmark.md`.
 
 ---
 
@@ -247,6 +334,15 @@ Plan: `docs/superpowers/plans/2026-08-11-muse-glimmer-30b-rocm.md`.
   (`configs/serve-args.conf`). (Finding #1.)
 - **Model download stalls at KB/s** → make sure `HF_ENDPOINT=https://hf-mirror.com`
   and the shards are fetched via `hf_parallel_get.py`, not stock `hf download`.
-  (Finding #3.)
+  (Finding #3.) For `dflash-kquant.gguf` / `mmproj-kquant.gguf` specifically →
+  fetch direct from huggingface.co with `HF_HUB_DISABLE_XET=1` (Xet not proxied
+  by the mirror).
+- **DFlash shows no speedup** → you forgot `--spec-type draft-dflash
+  --spec-draft-n-max 16`. `--spec-type` defaults to `none`; `-md …` alone is a
+  silent no-op. (Finding #8.)
+- **DFlash @ c=16 hangs forever** → that's the known pathology. Drop DFlash at
+  c ≥ 8 and rerun; c=16 baseline is fine. (Finding #9.)
+- **Footprint looks wrong (rocm-smi ~1 GiB)** → trust VmPeak, not rocm-smi/VmHWM.
+  (Finding #6.)
 - **`pytest` shows server-test failures** → start a server (the conftest skips
   them only when nothing is on :8000).

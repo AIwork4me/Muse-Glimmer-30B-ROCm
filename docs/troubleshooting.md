@@ -11,6 +11,12 @@ Every gotcha we hit, as **symptom → cause → fix**. Skim the left column.
 | Import error / crash at vLLM startup | [#amdsmi](#amdsmi) |
 | `hf download` stalls at KB/s or never finishes | [#model-fetch-slow](#model-fetch-slow) |
 | `uv run` wipes vLLM (`ModuleNotFoundError: vllm`) | [#no-sync](#no-sync) |
+| DFlash loads but no speedup (`-md` alone) | [#dflash-silent-noop](#dflash-silent-noop) |
+| DFlash @ c=16 hangs / never finishes | [#dflash-c16-pathological](#dflash-c16-pathological) |
+| `[spec] failed to measure draft model memory` warning | [#dflash-mem-warning](#dflash-mem-warning) |
+| `dflash-kquant.gguf` / `mmproj-kquant.gguf` download fails | [#dflash-mmproj-xet](#dflash-mmproj-xet) |
+| rocm-smi shows ~1 GiB but model is 16+ GiB | [#memory-footprint-apu](#memory-footprint-apu) |
+| `finish_reason: length` / empty `content` | [#reasoning-length](#reasoning-length) |
 
 ---
 
@@ -137,3 +143,173 @@ scripts). Never drop it. If you wiped vLLM, re-run `scripts/01-build-vllm.sh`.
 [aiter]: https://github.com/vllm-project/vllm/issues/51136
 [invdev]: https://github.com/ROCm/ROCm/issues/4909
 [chunked]: https://github.com/vllm-project/vllm/issues/5013
+
+---
+
+## DFlash / llama.cpp benchmark gotchas
+
+These come from the DFlash + full benchmark matrix work
+([`docs/results/METHODOLOGY.md`](results/METHODOLOGY.md),
+[`docs/results/benchmark.md`](results/benchmark.md)). The matrix was measured on
+the llama.cpp path; vLLM still has DFlash off (registry bug).
+
+## dflash-silent-noop
+
+**Symptom:** you launch `llama-server` with `-md models/dflash-kquant.gguf -ngld
+99` and the throughput is **identical to the no-draft baseline** (no speedup,
+draft acceptance is null/zero). The draft model loaded fine but did nothing.
+
+**Cause:** `llama-server`'s `--spec-type` **defaults to `none`**. `-md … -ngld
+99` loads the draft model into memory but never engages the speculative-decoding
+loop, so the server runs as a normal single-model server. This is a *silent*
+no-op — no warning is logged.
+
+**Fix:** always pass `--spec-type draft-dflash --spec-draft-n-max 16` alongside
+`-md`. The full DFlash invocation is:
+
+```
+-m models/<weight>.gguf -ngl 999 ... \
+  -md models/dflash-kquant.gguf -ngld 99 \
+  --spec-type draft-dflash --spec-draft-n-max 16
+```
+
+`--spec-draft-n-max 16` is the measured sweet spot (it equals the DFlash
+drafter's block_size). A pre-matrix sweep gave n_max `3 / 8 / 16 / 32` →
+**1.14× / 1.51× / 1.60× / 1.60×** — 16 is the elbow; 32 is flat, so 16 wins on
+memory. With this engaged, the 17gb weight delivers **2.20×** (23.03 vs 10.48
+tok/s) at greedy batch 1. Verification: the cell JSON's `acceptance` block is
+non-null and the rate is ~0.23. If you see 1.0× with null acceptance, you have
+fallen into this trap.
+
+## dflash-c16-pathological
+
+> **⚠ Headline pitfall. Do NOT combine DFlash with `-np 16` (high concurrency).
+> It is pathologically slow — >1000× slower per-request than the c=16
+> baseline.** This is documented prominently in
+> [`README.md`](../README.md#best-practices--pitfalls--read-this-before-using-dflash-or-c16),
+> [`docs/results/benchmark.md`](results/benchmark.md#c16--dflash-do-not-use), and
+> [`docs/results/METHODOLOGY.md`](results/METHODOLOGY.md#6-the-c16--dflash-pathology).
+
+**Symptom:** a DFlash cell at `-np 16` hangs or appears to make no progress.
+The dynamic c=16 DFlash REPS=5 cell was **aborted after 5 h 16 m** with no
+completion; a 17gb c=16 DFlash probe (16 concurrent × 48 tokens) completed
+**0 of 768 tokens in 27.7 s**.
+
+**Cause (verified):** at `-np 16` the drafter fires for all 16 slots
+simultaneously, generating an enormous draft volume (in the dynamic run:
+**3,270,000 draft tokens**) that is almost entirely rejected (**6,060 accepted
+= 0.18 %**). The full generate+verify compute for *all those rejected drafts* is
+paid in full. The draft model's predictions diverge badly from the target under
+batched concurrent load, so spec-decode goes into reverse — it costs more than
+it saves.
+
+**Fix:** at `c ≥ 8` (especially `c = 16`), **drop DFlash** (just omit `-md` and
+the `--spec-*` flags) and run the baseline. c=16 baselines are healthy:
+**17gb 34.5 tok/s, dynamic 31.0 tok/s aggregate.** DFlash is a clear win only at
+`c ≤ 4` (best at `c = 1`: ~2.2×). The full best-practice table is in
+[`README.md`](../README.md#best-practices--pitfalls--read-this-before-using-dflash-or-c16).
+
+> c=16 itself is fine — the pathology is DFlash-specific. Both c=16 DFlash cells
+> are recorded as `pathological: true` evidence-based non-completions in
+> `docs/results/matrix/` (see `cell-study2-{17gb,dynamic}-np16-df1-vis0.json`),
+> not as missing data.
+
+## dflash-mem-warning
+
+**Symptom:** at `llama-server` startup with `-md …`, this is logged:
+
+```
+[spec] failed to measure draft model memory
+```
+
+**Cause:** harmless. The drafter's GPU memory footprint query isn't implemented
+in this build path; the drafter still loads and drafts correctly.
+
+**Fix:** none needed — ignore it. The drafter's memory cost shows up in the
+process VmPeak (~+2.5–3 GiB vs baseline), which is the footprint we report. See
+[`docs/results/METHODOLOGY.md §5`](results/METHODOLOGY.md#5-the-memory-methodology--trust-vmpeak-not-rocm-smi-or-vmhwm).
+
+## dflash-mmproj-xet
+
+**Symptom:** `hf download` (or `huggingface-cli download`) of
+`dflash-kquant.gguf` or `mmproj-kquant.gguf` fails through the `hf-mirror.com`
+mirror with one of:
+
+- `Distant resource does not seem to be on huggingface.co`
+- `HTTP 401 Unauthorized` from `cas-server.xethub.hf.co`
+- `hf_parallel_get.py` failing its Content-Range probe on a
+  `us.aws.cdn.hf.co/xet-bridge` redirect
+
+**Cause:** these two artifacts are **Xet-backed** (deduplicated via Xet's CAS).
+`hf-mirror.com` proxies the HF API and `/resolve` metadata, but it does **not**
+proxy Xet's CAS — so any Xet client through the mirror either 401s (native xet)
+or fails the redirect (parallel range downloader). The large text shards are
+*not* Xet-backed, which is why `hf_parallel_get.py` works for them.
+
+**Fix:** fetch these two **direct from `huggingface.co`**, with Xet disabled so
+the client uses classic LFS:
+
+```bash
+HF_HUB_DISABLE_XET=1 HF_ENDPOINT=https://huggingface.co \
+  hf download meta-models/Muse-Glimmer-30B-GGUF \
+    dflash-kquant.gguf mmproj-kquant.gguf \
+  --local-dir models
+```
+
+(The big text shards still go through the mirror + parallel range downloader —
+see [model-fetch-slow](#model-fetch-slow).) Manifest of all four artifacts:
+[`docs/results/matrix/gguf-manifest.md`](results/matrix/gguf-manifest.md).
+
+## memory-footprint-apu
+
+**Symptom:** `rocm-smi --showmeminfo vram` reports ~1 GiB used and ~32 GiB total
+for a 16+ GiB model; `/proc/<pid>/status` `VmHWM` is 1–10 GiB for the same
+process. Both look wrong.
+
+**Cause:** on Strix Halo (a unified-memory APU), `rocm-smi` VRAM reports only the
+~32 GiB **dedicated carve-out**, and the carve-out counter only ticks for buffers
+allocated through that specific path. The mmap'd GGUF and the GPU-offloaded
+unified-host-visible buffers don't increment it. `VmHWM` undercounts because
+mmap'd file pages are paged in/out by the kernel and many GPU-offloaded pages
+don't show as resident.
+
+**Fix:** for the real footprint, read **`VmPeak`** from
+`/proc/<pid>/status` — that sees the full mmap'd model mapping (~24–32 GiB on
+this matrix). This is what every cell JSON and the rendered matrix report; the
+renderer (`scripts/render_matrix.py`) emits VmPeak as the footprint column. See
+[`docs/results/METHODOLOGY.md §5`](results/METHODOLOGY.md#5-the-memory-methodology--trust-vmpeak-not-rocm-smi-or-vmhwm)
+for the full methodology and the cross-checks (drafter +2.7–2.8 GiB ≈ Meta's
+~+3 GB; vision +1.8–1.9 GiB ≈ Meta's ~+2 GB).
+
+## reasoning-length
+
+**Symptom:** the model returns `finish_reason: "length"` and (at very small
+`max_tokens`) an empty `content` field, even though the prompt is trivial.
+
+**Cause:** Muse-Glimmer is a **reasoning model** — it emits chain-of-thought in
+the `reasoning` channel *first*, then the answer in `content`. With
+`reasoning_strength=high` (the default, and **not switchable off** —
+`--reasoning off` is a no-op) the thinking can run for hundreds of tokens before
+the answer. At `max_tokens=16` (or even 64) the model burns the entire budget on
+reasoning and never reaches `content`, so you see `finish_reason=length` and
+empty content.
+
+**Fix:** give the model room to think. `max_tokens ≥ 256` is the practical floor
+for short answers (the Study 1 greedy run uses 256 and still finishes on
+`length` for some prompts — that's expected and does not affect tok/s, which is
+computed over the generated tokens). For real chat turns, `max_tokens ≥ 512` is
+safer. To shorten thinking, set `reasoning_strength` to `low` or `medium` via
+`chat_template_kwargs`:
+
+```json
+{"messages":[...], "chat_template_kwargs":{"reasoning_strength":"low"}}
+```
+
+(`low`/`medium`/`high`/`xhigh` are the supported values; default is `high`.)
+
+A second, related trap: `llama-server` divides `-c` across `-np` slots, so each
+request gets `-c / -np` of context. If the per-slot context is below your
+`max_tokens`, generation will be **silently truncated** with no error. The
+benchmark harness uses `-c = np × 8192` so each slot has 8192 — comfortably above
+`max_tokens`. If you configure concurrency manually, keep per-slot context well
+above `max_tokens`.

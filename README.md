@@ -60,6 +60,67 @@ tool-calls use the vLLM path. See [`docs/adaptation.md`](docs/adaptation.md).
 
 ---
 
+## Best practices / Pitfalls — read this before using DFlash or c=16
+
+The DFlash + full benchmark matrix
+([`docs/results/benchmark.md`](docs/results/benchmark.md),
+[`docs/results/METHODOLOGY.md`](docs/results/METHODOLOGY.md)) uncovered two
+operational gotchas. Follow this table and you will not hit them.
+
+### Best-practice config table
+
+| Use case | Config | Expected |
+|---|---|---|
+| Single-stream interactive chat (c=1) | **DFlash ON**, `--spec-type draft-dflash --spec-draft-n-max 16` | **~2.2× faster** (10.5 → 23.0 tok/s on 17gb), identical output under greedy, ~+3 GiB VmPeak |
+| Light concurrent (c ≤ 4) | **DFlash ON** | ~1.3–1.75× aggregate; mind the +3 GiB drafter footprint |
+| **High throughput (c ≥ 8, esp c=16)** | **DFlash OFF** (baseline) | c16 ~31–34 tok/s; **DFlash here is pathological** |
+
+> When DFlash is on, you MUST pass `--spec-type draft-dflash --spec-draft-n-max 16`
+> (plus `-md models/dflash-kquant.gguf -ngld 99`). **`--spec-type` defaults to
+> `none`**, so `-md …` alone loads the draft but never drafts — a silent 1.0×
+> no-op. `n_max=16` is the measured sweet spot (= DFlash block_size).
+
+### ⚠ Do NOT combine DFlash with `-np 16`
+
+It is **pathologically slow** — verified, not a fluke:
+
+- **17gb c=16 DFlash:** a 16×48-token probe batch completed **0 of 768 tokens in
+  28 s** while the baseline c=16 run delivered 34.5 tok/s — effectively >1000×
+  slower per-request.
+- **dynamic c=16 DFlash:** the full benchmark cell was **aborted after 5 h 16 m**
+  with no completion; draft acceptance collapsed to **0.18 %** (6,060 accepted /
+  3,270,000 draft tokens), ~1/37× the baseline aggregate rate.
+- **Root cause:** at c=16 the drafter fires for all 16 slots at once, generating
+  millions of tokens that are >99.8 % rejected, while the full generate+verify
+  cost for those rejected drafts is paid in full. Spec-decode goes into reverse.
+- **c=16 itself is fine** (baseline 17gb 34.5, dynamic 31.0 tok/s). The pathology
+  is DFlash-specific.
+
+Full evidence + write-up:
+[`docs/results/benchmark.md` — c=16 + DFlash: do not use](docs/results/benchmark.md#c16--dflash-do-not-use).
+Troubleshooting entries: [dflash-c16-pathological](docs/troubleshooting.md#dflash-c16-pathological),
+[dflash-silent-noop](docs/troubleshooting.md#dflash-silent-noop),
+[memory-footprint-apu](docs/troubleshooting.md#memory-footprint-apu).
+
+### Headline DFlash result (gfx1151 vs Meta's anchors)
+
+Same methodology as Meta's published table (greedy, batch 1, K-Quant-17GB +
+quantized drafter, llama.cpp):
+
+| GPU | Baseline (tok/s) | DFlash (tok/s) | Speedup |
+|---|---|---|---|
+| Nvidia RTX 5090 (Meta) | 74.9 | 233.4 | 3.1× |
+| Apple M5 Max (Meta) | 26.6 | 50.2 | 1.8× |
+| **gfx1151, 17gb (this repo)** | **10.48** | **23.03** | **2.20×** |
+| **gfx1151, dynamic (this repo)** | **9.14** | **21.82** | **2.39×** |
+
+gfx1151 sits **between the M5 Max and the RTX 5090** — credible for a 50 TOPS
+NPU/iGPU-class part. Byte-equivalence PASS (greedy spec-decode is exact: both
+baseline and DFlash emit `391` for `17 × 23`). See
+[`docs/results/benchmark.md` — Study 1](docs/results/benchmark.md#study-1--dflash-anchor-greedy-batch-1--meta-comparable).
+
+---
+
 ## What changed from Meta's MI300X recipe
 
 | | MI300X | **gfx1151** |
