@@ -187,14 +187,17 @@ async def run_cell(base, cell_args, prompts, image_b64=None):
     conc = cell_args["np"]
     per_rep = []
     # High-concurrency cells (np=16) on a 30B APU model can keep a single request
-    # decoding for >5 min under batch contention; the aiohttp DEFAULT total=300s
-    # aborts those slow-but-valid streams mid-read (verified 2026-08-12: the first
-    # two c=16 cells died here with TimeoutError while the server stayed alive).
-    # Lift the ceiling: no total cap (a legitimate 512-token decode at c=16 may
-    # take 10+ min), but abort if NO bytes arrive for 600s (a dead server). This
-    # does NOT change the measurement — ttft/tpot/agg_tok_s come from perf_counter
-    # markers in stream_one, independent of this client-side ceiling.
-    timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=600)
+    # decoding for many minutes under batch contention; the aiohttp DEFAULT
+    # total=300s aborted those mid-read (verified 2026-08-12: c=16 cells died
+    # with TimeoutError while the server stayed alive). At c=16 the TAIL latency
+    # of the slowest of 16 concurrent requests (heavy contention + DFlash
+    # verification overhead + 512 tokens) can exceed 600s between chunks, so
+    # sock_read must be generous. total=None (no wall cap — a legitimate c=16
+    # decode may take 10-20+ min); sock_read=1200s catches a genuinely dead
+    # server within 20 min. This does NOT change the measurement —
+    # ttft/tpot/agg_tok_s come from perf_counter markers in stream_one,
+    # independent of this client-side ceiling.
+    timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=1200)
     async with aiohttp.ClientSession(timeout=timeout) as s:
         for _ in range(cell_args.get("warmup", 2)):
             await asyncio.gather(*[stream_one(s, base, _payload(cell_args, prompts[0]["text"], image_b64))
