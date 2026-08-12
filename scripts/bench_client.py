@@ -106,7 +106,118 @@ async def main(base, concurrency, prompt, max_tokens, model):
             "wall_s": wall, "agg_tok_s": tot / wall if wall else 0}
 
 
-if __name__ == "__main__":
+import argparse
+
+try:
+    import base64
+except ImportError:
+    base64 = None
+
+
+async def stream_one(session, base, payload):
+    """Stream one request; return per-request timing dict. endpoint in payload meta."""
+    t0 = time.perf_counter()
+    first_t = last_t = None
+    n_tokens = 0
+    finish = None
+    url = f"{base}{'/v1/chat/completions' if payload['_endpoint']=='chat' else '/v1/completions'}"
+    body = {k: v for k, v in payload.items() if not k.startswith("_")}
+    body["stream"] = True
+    async with session.post(url, json=body) as r:
+        async for raw in r.content:
+            line = raw.decode(errors="ignore").strip()
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                break
+            try:
+                obj = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            now = time.perf_counter()
+            if first_t is None:
+                first_t = now
+            last_t = now
+            # count tokens from usage (last chunk) or choices delta
+            if obj.get("usage"):
+                n_tokens = obj["usage"].get("completion_tokens", n_tokens)
+            ch = obj.get("choices") or []
+            if ch and "finish_reason" in ch[0] and ch[0]["finish_reason"]:
+                finish = ch[0]["finish_reason"]
+    t1 = time.perf_counter()
+    if n_tokens == 0 and last_t:  # fallback: no usage reported
+        n_tokens = 1
+    return {"t0": t0, "first_t": first_t or t0, "last_t": last_t or t0,
+            "t1": t1, "n_tokens": n_tokens, "finish_reason": finish or "stop"}
+
+
+def _payload(cell_args, prompt_text, image_b64=None):
+    p = {"_endpoint": cell_args["endpoint"], "model": "muse-glimmer-30B",
+         "max_tokens": cell_args["max_tokens"], "temperature": cell_args["temp"],
+         "top_p": cell_args["top_p"], "top_k": cell_args["top_k"],
+         "seed": cell_args["seed"]}
+    if cell_args["endpoint"] == "chat":
+        content = ([{"type": "text", "text": prompt_text}] if image_b64 is None
+                   else [{"type": "text", "text": prompt_text},
+                         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}}])
+        p["messages"] = [{"role": "user", "content": content}]
+        p["chat_template_kwargs"] = {"reasoning_strength": cell_args["reasoning_strength"]}
+    else:
+        p["prompt"] = prompt_text
+    return p
+
+
+async def run_cell(base, cell_args, prompts, image_b64=None):
+    """Run one cell: warmup, then REPS rounds (each round fires np concurrent requests
+    per prompt). Returns a list of per-rep metric dicts — one compute_run_metrics() per
+    rep — so the caller can take the median + report min/max (spec §6.2)."""
+    conc = cell_args["np"]
+    per_rep = []
+    async with aiohttp.ClientSession() as s:
+        for _ in range(cell_args.get("warmup", 2)):
+            await asyncio.gather(*[stream_one(s, base, _payload(cell_args, prompts[0]["text"], image_b64))
+                                   for _ in range(conc)])
+        for _ in range(cell_args["reps"]):
+            rep_reqs = []
+            for pr in prompts:
+                rep_reqs.extend(await asyncio.gather(*[
+                    stream_one(s, base, _payload(cell_args, pr["text"], image_b64))
+                    for _ in range(conc)]))
+            per_rep.append(compute_run_metrics(rep_reqs))
+    return per_rep
+
+
+def main_extended():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("base")
+    ap.add_argument("--study", required=True)
+    ap.add_argument("--endpoint", choices=["chat", "completions"], default="chat")
+    ap.add_argument("--prompts", default="scripts/prompt-sets/muse-glimmer-diverse.json")
+    ap.add_argument("--reps", type=int, default=3)
+    ap.add_argument("--warmup", type=int, default=2)
+    ap.add_argument("--np", type=int, default=1)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--temp", type=float, default=0)
+    ap.add_argument("--top-p", type=float, default=1.0)
+    ap.add_argument("--top-k", type=int, default=0)
+    ap.add_argument("--max-tokens", type=int, default=256)
+    ap.add_argument("--reasoning-strength", default="high")
+    ap.add_argument("--image", default=None)
+    args = ap.parse_args()
+    cell_args = vars(args)
+    prompts = json.load(open(args.prompts))["prompts"]
+    img = None
+    if args.image:
+        img = base64.b64encode(open(args.image, "rb").read()).decode()
+    per_rep = asyncio.run(run_cell(args.base, cell_args, prompts, img))
+    print(json.dumps(median_run_metrics(per_rep)))
+
+
+def _legacy_main():
+    """Legacy positional CLI: bench_client.py BASE C 512 — used by scripts/benchmark.sh.
+    Emits {"concurrency","total_out_tokens","wall_s","agg_tok_s"}. Does its own
+    asyncio.run + print, so call it directly (NOT asyncio.run(_legacy_main()))."""
     base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
     concurrency = int(sys.argv[2]) if len(sys.argv) > 2 else 1
     max_tokens = int(sys.argv[3]) if len(sys.argv) > 3 else 512
@@ -115,3 +226,12 @@ if __name__ == "__main__":
         "BENCH_PROMPT", "Summarize the plot of Hamlet in three sentences.")
     print(json.dumps(asyncio.run(
         main(base, concurrency, prompt, max_tokens, model))))
+
+
+if __name__ == "__main__":
+    # Legacy positional path "bench_client.py BASE C 512" -> scripts/benchmark.sh (unchanged).
+    # Everything else routes to the extended streaming CLI.
+    if len(sys.argv) > 2 and sys.argv[1].startswith("http") and sys.argv[2].isdigit():
+        _legacy_main()           # wraps the ORIGINAL __main__ block (does its own asyncio.run)
+    else:
+        main_extended()
