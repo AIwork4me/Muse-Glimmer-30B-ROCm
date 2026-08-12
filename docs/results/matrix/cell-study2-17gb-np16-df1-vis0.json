@@ -1,0 +1,39 @@
+{
+  "study": "study2",
+  "weight": "17gb",
+  "dflash": true,
+  "vision": false,
+  "np": 16,
+  "pathological": true,
+  "metrics": {
+    "agg_tok_s": null,
+    "total_tokens": 0,
+    "wall_s": null,
+    "ttft_p50": null,
+    "ttft_p90": null,
+    "tpot_median": null,
+    "reps": "did_not_complete",
+    "finish_reason_dist": {
+      "incomplete": "n/a"
+    }
+  },
+  "mem": {},
+  "acceptance": null,
+  "pathological_evidence": {
+    "finding": "DFlash @ c=16 is catastrophic: a 16x48-token batch completed 0 tokens in 28s",
+    "probe": "16 concurrent x max_tokens=48 -> 0/768 tokens completed in 27.7s (agg ~0 tok/s)",
+    "metrics_at_probe": {
+      "draft_tokens": 2472,
+      "accepted_tokens": 450,
+      "verification_steps": 183,
+      "acceptance_rate": 0.182,
+      "per_slot_acceptance_log": "0.065-0.091"
+    },
+    "baseline_c16_same_weight_tok_s": 34.47,
+    "verdict": "effectively unusable (>1000x slower per-request than baseline c=16)"
+  },
+  "manifest": {
+    "note": "PATHOLOGICAL \u2014 not a completed cell; evidence-based record",
+    "date": "2026-08-13"
+  }
+}

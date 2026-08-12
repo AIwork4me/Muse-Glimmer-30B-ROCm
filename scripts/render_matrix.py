@@ -16,12 +16,12 @@ def _row(c, base=None):
     acc_s = f'{int(round(acc["acceptance_rate"] * 100))}%' if acc.get("acceptance_rate") is not None else "—"
     return (f'| {c["weight"]} | {"DFlash" if c["dflash"] else "baseline"} | '
             f'{toks} | {m["ttft_p50"]:.2f} | {m["tpot_median"]:.4f} | '
-            f'{mem["VmHWM_gib"]:.1f} | {speedup or "—"} | {acc_s} |')
+            f'{mem["VmPeak_gib"]:.1f} | {speedup or "—"} | {acc_s} |')
 
 
 def _study1(cells):
     out = ["### Study 1 — DFlash anchor (greedy, batch 1, diverse prompt set) — Meta-comparable\n",
-           "| weight | mode | tok/s | TTFT p50 (s) | TPOT (s) | peak RSS (GiB) | Speedup | draft acceptance |",
+           "| weight | mode | tok/s | TTFT p50 (s) | TPOT (s) | footprint VmPeak (GiB) | Speedup | draft acceptance |",
            "|---|---|---|---|---|---|---|---|"]
     for w in ("17gb", "dynamic"):
         base = next((c["metrics"]["agg_tok_s"] for c in cells
@@ -33,16 +33,20 @@ def _study1(cells):
 
 def _study2(cells):
     out = ["### Study 2 — Throughput under load (temp 1.0) — NOT Meta-comparable\n",
-           "| weight | np | mode | agg tok/s | TTFT p90 (s) | TPOT med (s) | peak RSS (GiB) | acceptance |",
+           "| weight | np | mode | agg tok/s | TTFT p90 (s) | TPOT med (s) | footprint VmPeak (GiB) | acceptance |",
            "|---|---|---|---|---|---|---|---|"]
     for c in sorted([x for x in cells if x.get("study") == "study2"],
                     key=lambda x: (x["weight"], x["np"], x["dflash"])):
+        if c.get("pathological"):
+            out.append(f'| {c["weight"]} | {c["np"]} | DFlash | '
+                       f'⚠ **PATHOLOGICAL — did not complete** (see c=16 warning) | — | — | — | — |')
+            continue
         m = c["metrics"]
         acc = c.get("acceptance") or {}
         acc_s = f'{int(round(acc["acceptance_rate"] * 100))}%' if acc.get("acceptance_rate") is not None else "—"
         out.append(f'| {c["weight"]} | {c["np"]} | {"DFlash" if c["dflash"] else "baseline"} | '
                    f'{m["agg_tok_s"]:.1f} | {m["ttft_p90"]:.2f} | {m["tpot_median"]:.4f} | '
-                   f'{c["mem"]["VmHWM_gib"]:.1f} | {acc_s} |')
+                   f'{c["mem"]["VmPeak_gib"]:.1f} | {acc_s} |')
     return "\n".join(out)
 
 

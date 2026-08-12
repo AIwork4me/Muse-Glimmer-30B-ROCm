@@ -1,0 +1,38 @@
+{
+  "study": "study2",
+  "weight": "dynamic",
+  "dflash": true,
+  "vision": false,
+  "np": 16,
+  "pathological": true,
+  "metrics": {
+    "agg_tok_s": null,
+    "total_tokens": 0,
+    "wall_s": null,
+    "ttft_p50": null,
+    "ttft_p90": null,
+    "tpot_median": null,
+    "reps": "did_not_complete",
+    "finish_reason_dist": {
+      "incomplete": "n/a"
+    }
+  },
+  "mem": {},
+  "acceptance": null,
+  "pathological_evidence": {
+    "finding": "DFlash @ c=16 did not complete in 5h16m (REPS=5 run, aborted)",
+    "run": "full cell attempt, REPS=5, aborted after 5h16m (18900s) with no completion",
+    "metrics_at_abort": {
+      "draft_tokens": 3270000,
+      "accepted_tokens": 6060,
+      "acceptance_rate": 0.0018,
+      "predicted_tokens_seconds_observed": 0.83
+    },
+    "baseline_c16_same_weight_tok_s": 31.05,
+    "verdict": "acceptance collapses to 0.18%; draft token volume explodes to 3.27M; ~1/37x baseline aggregate rate"
+  },
+  "manifest": {
+    "note": "PATHOLOGICAL \u2014 not a completed cell; evidence-based record",
+    "date": "2026-08-13"
+  }
+}
