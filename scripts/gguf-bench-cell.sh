@@ -27,7 +27,11 @@ SRV_ARGS=$(python3 scripts/gguf_bench_args.py "$CELL" server \
 LOG=$(mktemp)
 "$LLAMA" $SRV_ARGS >"$LOG" 2>&1 &
 SRV_PID=$!
-trap 'kill $SRV_PID 2>/dev/null || true' EXIT
+# Kill + wait on exit so the server fully releases port 8080 and GPU memory
+# before the next cell starts (the matrix driver runs cells back-to-back; a
+# bare `kill` that doesn't reap can leave the port held and the next launch
+# fails to bind). `wait` returns non-zero if the child was already gone, hence || true.
+trap 'kill "$SRV_PID" 2>/dev/null; wait "$SRV_PID" 2>/dev/null || true' EXIT
 
 # wait for health
 for _ in $(seq 1 120); do curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1 && break; sleep 1; done
@@ -39,7 +43,7 @@ METRICS=$(uv run --no-sync python scripts/bench_client.py http://127.0.0.1:8080 
   --max-tokens "$MAX_TOKENS" --reps "$REPS" --warmup "$WARMUP" --seed "$SEED" \
   --reasoning-strength "$RS" "${IMG_ARG[@]}")
 
-MEM=$(python3 scripts/capture_proc.py status "$SRV_PID")
+MEM=$(python3 scripts/capture_proc.py status "$SRV_PID" 2>/dev/null || echo '{"error":"proc unreadable"}')
 VRAM=$(rocm-smi --showmeminfo vram --json 2>/dev/null | python3 scripts/capture_proc.py vram 2>/dev/null || echo '{}')
 POWER=$(rocm-smi --showpower --showtemp --json 2>/dev/null | python3 scripts/capture_proc.py power 2>/dev/null || echo '{}')
 ACC=$(curl -s http://127.0.0.1:8080/metrics 2>/dev/null | python3 scripts/capture_proc.py metrics 2>/dev/null || echo 'null')

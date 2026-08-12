@@ -54,9 +54,15 @@ def scrape_metrics(text):
     """Pull speculative-decoding counters from llama-server /metrics (Prometheus).
 
     llama-server (build 0b1bad1+) exposes these as `llamacpp:spec_decode_*`
-    (verified on 2026-06-12 against a live gfx1151 server). Older builds used
+    (verified on 2026-08-12 against a live gfx1151 server — exact names:
+    `llamacpp:spec_decode_num_{draft,accepted,drafts}_total`). Older builds used
     `llama_speculative_*`; we try the real names first and fall back to the
     legacy aliases so the parser stays robust across builds.
+
+    There is NO published `avg_accepted` gauge: the per-STEP average must be
+    DERIVED as `num_accepted_tokens_total / num_drafts_total` (drafts = the
+    count of speculative verification steps, the correct per-step denominator —
+    not the draft-TOKEN count). Returns null when num_drafts_total is 0/absent.
     """
     def grab(*names):
         for name in names:
@@ -69,8 +75,9 @@ def scrape_metrics(text):
                     "llama_speculative_accepted_draft_tokens_total")
     drafted = grab("llamacpp:spec_decode_num_draft_tokens_total",
                    "llama_speculative_draft_tokens_total")
-    avg = grab("llamacpp:spec_decode_avg_accepted",
-               "llama_speculative_avg_accepted")
+    drafts = grab("llamacpp:spec_decode_num_drafts_total",
+                  "llama_speculative_drafts_total")
+    avg = (accepted / drafts) if (accepted is not None and drafts) else None
     out = {
         "accepted_draft_tokens": accepted,
         "draft_tokens": drafted,

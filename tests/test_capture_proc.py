@@ -83,7 +83,10 @@ llamacpp:spec_decode_num_drafts_total 0
 
 
 def test_scrape_metrics_real_llamacpp_populated():
-    """DFlash cell: non-zero counters should produce an acceptance_rate."""
+    """DFlash cell: non-zero REAL counters must produce avg_accepted_per_step AND
+    acceptance_rate. avg_accepted_per_step = accepted/drafts (per verification
+    STEP), not accepted/draft_tokens. Locks the 2026-08-12 fix that replaced the
+    non-existent `llamacpp:spec_decode_avg_accepted` gauge with the derived ratio."""
     POPULATED = """
 llamacpp:spec_decode_num_draft_tokens_total 1000
 llamacpp:spec_decode_num_accepted_tokens_total 680
@@ -92,7 +95,26 @@ llamacpp:spec_decode_num_drafts_total 500
     d = scrape_metrics(POPULATED)
     assert d["accepted_draft_tokens"] == 680.0
     assert d["draft_tokens"] == 1000.0
+    # per-step average: 680 accepted across 500 verification steps
+    assert d["avg_accepted_per_step"] is not None
+    assert abs(d["avg_accepted_per_step"] - 680.0 / 500.0) < 1e-9
+    # token-level acceptance rate: 680 / 1000 drafted
     assert abs(d["acceptance_rate"] - 0.68) < 1e-9
+
+
+def test_scrape_metrics_real_llamacpp_zero_drafts():
+    """Regression for the fix: baseline cells report num_drafts_total=0 (spec
+    decoding inactive). avg_accepted_per_step MUST be null, never NaN (0/0)."""
+    ZERO = """
+llamacpp:spec_decode_num_draft_tokens_total 0
+llamacpp:spec_decode_num_accepted_tokens_total 0
+llamacpp:spec_decode_num_drafts_total 0
+"""
+    d = scrape_metrics(ZERO)
+    assert d["accepted_draft_tokens"] == 0.0
+    assert d["draft_tokens"] == 0.0
+    assert d["avg_accepted_per_step"] is None
+    assert "acceptance_rate" not in d
 
 
 VRAM = '{"card0": {"VRAM Total Memory (B)": "34359738368", "VRAM Total Used Memory (B)": "18253611008"}}'
