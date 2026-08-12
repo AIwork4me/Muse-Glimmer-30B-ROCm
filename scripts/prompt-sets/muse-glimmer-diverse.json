@@ -1,0 +1,13 @@
+{
+  "id": "muse-glimmer-diverse",
+  "version": 1,
+  "note": "6-prompt diverse set matching Meta's DFlash methodology (greedy, batch 1). Categories span the model's workload mix; each is a short, well-defined generation task so decode dominates.",
+  "prompts": [
+    {"category": "code", "text": "Write a Python function that returns the n-th Fibonacci number iteratively. Include a docstring and one assert-based test call."},
+    {"category": "math", "text": "A train travels 60 km in 45 minutes, then 100 km in 1 hour 20 minutes. What is its average speed for the whole journey in km/h? Show the steps."},
+    {"category": "factual", "text": "In three sentences, explain why the sky appears blue during the day and reddish at sunset."},
+    {"category": "creative", "text": "Write a four-line rhyming poem about a robot learning to paint."},
+    {"category": "reasoning", "text": "Three friends share a bill. Alice pays twice as much as Bob, and Bob pays three times as much as Carol. If the total is 120, how much does each pay? Reason step by step."},
+    {"category": "instruction", "text": "List five practical tips for reducing daily water usage at home, each as a single bullet with a short verb-first phrase."}
+  ]
+}
