@@ -3,7 +3,6 @@
 import glob
 import json
 import os
-import sys
 
 
 def _row(c, base=None):
@@ -11,7 +10,7 @@ def _row(c, base=None):
     mem = c["mem"]
     toks = f'{m["agg_tok_s"]:.1f}'
     speedup = ""
-    if base and base > 0:
+    if base:
         speedup = f'{m["agg_tok_s"] / base:.2f}x'
     acc = c.get("acceptance") or {}
     acc_s = f'{int(round(acc["acceptance_rate"] * 100))}%' if acc.get("acceptance_rate") is not None else "—"
@@ -26,7 +25,7 @@ def _study1(cells):
            "|---|---|---|---|---|---|---|---|"]
     for w in ("17gb", "dynamic"):
         base = next((c["metrics"]["agg_tok_s"] for c in cells
-                     if c["weight"] == w and not c["dflash"]), None)
+                     if c["weight"] == w and not c["dflash"] and c.get("study") == "study1"), None)
         for c in [x for x in cells if x["weight"] == w and x.get("study") == "study1"]:
             out.append(_row(c, base))
     return "\n".join(out)

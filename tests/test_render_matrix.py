@@ -14,6 +14,10 @@ CELLS = [
      "mem": {"VmHWM_gib": 18.8, "weights_gib": 16.8, "kv_gib": 0.4},
      "acceptance": {"acceptance_rate": 0.78, "avg_accepted_per_step": 2.1},
      "reps": 3, "seed": 0},
+    {"study": "study2", "weight": "17gb", "dflash": False, "vision": False, "np": 4,
+     "metrics": {"agg_tok_s": 15.2, "ttft_p50": 0.35, "ttft_p90": 0.42, "tpot_median": 0.07, "total_tokens": 1536},
+     "mem": {"VmHWM_gib": 18.5, "weights_gib": 16.8, "kv_gib": 1.7},
+     "acceptance": None, "reps": 3, "seed": 0},
 ]
 
 
@@ -28,3 +32,10 @@ def test_render_study1_has_speedup_column():
 
 def test_render_handles_empty():
     assert "no cells" in render_studies([]).lower()
+
+
+def test_render_study2_ttft_p90():
+    md = render_studies(CELLS)
+    assert "### Study 2" in md
+    # ttft_p90 = 0.42 should be formatted as 0.42
+    assert "0.42" in md
