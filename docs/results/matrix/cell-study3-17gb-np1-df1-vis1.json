@@ -1,0 +1,61 @@
+{
+  "study": "study3",
+  "weight": "17gb",
+  "dflash": true,
+  "vision": true,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 20.463988827663414,
+    "total_tokens": 2856,
+    "wall_s": 137.7861598669988,
+    "ttft_p50": 0.7402813545013487,
+    "ttft_p90": 0.8300023265001073,
+    "tpot_median": 0.04710417588467734,
+    "agg_tok_s_min": 19.913915057016528,
+    "agg_tok_s_max": 20.76405934211132,
+    "reps": 3,
+    "finish_reason_dist": {
+      "length": 12,
+      "stop": 6
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 30400884,
+    "VmPeak_gib": 28.99,
+    "VmHWM_kib": 2545172,
+    "VmHWM_gib": 2.43,
+    "VmRSS_kib": 2545172,
+    "VmRSS_gib": 2.43,
+    "RssShmem_kib": 65536,
+    "RssShmem_gib": 0.06,
+    "vram_used_mib": 1094.4,
+    "vram_total_mib": 32768.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 6958,
+    "draft_tokens": 37022,
+    "acceptance_rate": 0.18794230457565772,
+    "avg_accepted_per_step": 3.9090000000000003
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": null,
+    "temp_c": 61.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 16 --mmproj models/mmproj-kquant.gguf",
+    "seed": 42,
+    "reps": 3,
+    "build": "0b1bad1",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Graphics\", \"Card Model\": \"0x1586\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"STRXLGEN\", \"Subsystem ID\": \"-0x72ff\", \"Device Rev\": \"0xd1\", \"Node ID\": \"1\", \"GUID\": \"21984\", \"GFX Version\": \"gfx1151\"}}",
+    "kernel": "6.17.0-1032-oem",
+    "date": "2026-08-13"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 6958.0,
+    "draft_tokens": 37022.0,
+    "avg_accepted_per_step": 2.7977482911137916,
+    "acceptance_rate": 0.18794230457565772
+  }
+}

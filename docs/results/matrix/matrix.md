@@ -27,4 +27,9 @@
 
 | weight | np | mode | agg tok/s | TTFT p90 (s) | TPOT med (s) | VRAM (MiB) | VmPeak (GiB) | acceptance |
 |---|---|---|---|---|---|---|---|---|
+| 17gb | 1 | baseline | 10.5 | 0.76 | 0.0940 | 1093 | 26.2 | — |
+| 17gb | 1 | DFlash | 20.5 | 0.83 | 0.0471 | 1094 | 29.0 | 19% |
+| 17gb | 4 | baseline | 21.1 | 2.04 | 0.1768 | 1093 | 29.2 | — |
+| dynamic | 1 | baseline | 9.1 | 0.82 | 0.1086 | 1093 | 29.0 | — |
+| dynamic | 4 | baseline | 20.0 | 2.15 | 0.1758 | 1093 | 31.9 | — |
 
