@@ -1,0 +1,52 @@
+{
+  "study": "study1",
+  "weight": "17gb",
+  "dflash": false,
+  "vision": false,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 10.464585389373072,
+    "total_tokens": 1536,
+    "wall_s": 146.78077944299912,
+    "ttft_p50": 0.45643561400083854,
+    "ttft_p90": 0.46616638300019986,
+    "tpot_median": 0.09434123045490445,
+    "agg_tok_s_min": 10.448026058282396,
+    "agg_tok_s_max": 10.467582505123659,
+    "reps": 3,
+    "finish_reason_dist": {
+      "length": 18
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 25075380,
+    "VmPeak_gib": 23.91,
+    "VmHWM_kib": 1443544,
+    "VmHWM_gib": 1.38,
+    "VmRSS_kib": 1443544,
+    "VmRSS_gib": 1.38,
+    "RssShmem_kib": 65536,
+    "RssShmem_gib": 0.06,
+    "vram_used_mib": 1084.0,
+    "vram_total_mib": 32768.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 0.0,
+    "draft_tokens": 0.0,
+    "avg_accepted_per_step": null
+  },
+  "power_temp": {
+    "power_w": null,
+    "temp_c": 65.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 0 --seed 0 --metrics --port 8080 --host 127.0.0.1",
+    "seed": 0,
+    "reps": 3,
+    "build": "0b1bad1",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Graphics\", \"Card Model\": \"0x1586\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"STRXLGEN\", \"Subsystem ID\": \"-0x72ff\", \"Device Rev\": \"0xd1\", \"Node ID\": \"1\", \"GUID\": \"21984\", \"GFX Version\": \"gfx1151\"}}",
+    "kernel": "6.17.0-1032-oem",
+    "date": "2026-08-12"
+  }
+}

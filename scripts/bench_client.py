@@ -69,9 +69,16 @@ def median_run_metrics(reps):
     if not reps:
         return {}
     keys = ["agg_tok_s", "total_tokens", "wall_s", "ttft_p50", "ttft_p90", "tpot_median"]
-    out = {k: median([r[k] for r in reps if r.get(k) is not None]) for k in keys}
-    toks = [r["agg_tok_s"] for r in reps]
-    out["agg_tok_s_min"], out["agg_tok_s_max"] = min(toks), max(toks)
+    # For each key, take the median of the non-None values across reps; if a key
+    # is None for every rep (e.g. tpot_median when no rep produced >1 token),
+    # emit null rather than raising median-of-empty.
+    out = {}
+    for k in keys:
+        vals = [r[k] for r in reps if r.get(k) is not None]
+        out[k] = median(vals) if vals else None
+    toks = [r["agg_tok_s"] for r in reps if r.get("agg_tok_s") is not None]
+    if toks:
+        out["agg_tok_s_min"], out["agg_tok_s_max"] = min(toks), max(toks)
     out["reps"] = len(reps)
     from collections import Counter
     fr = Counter()
@@ -123,6 +130,11 @@ async def stream_one(session, base, payload):
     url = f"{base}{'/v1/chat/completions' if payload['_endpoint']=='chat' else '/v1/completions'}"
     body = {k: v for k, v in payload.items() if not k.startswith("_")}
     body["stream"] = True
+    # Without include_usage, OpenAI-compatible servers (llama.cpp, vLLM) omit
+    # the token-count chunk while streaming, leaving n_tokens=0 and forcing a
+    # degenerate n_tokens=1 fallback that corrupts agg_tok_s and nulls
+    # tpot_median. Require the usage chunk so metrics are real.
+    body["stream_options"] = {"include_usage": True}
     async with session.post(url, json=body) as r:
         async for raw in r.content:
             line = raw.decode(errors="ignore").strip()
