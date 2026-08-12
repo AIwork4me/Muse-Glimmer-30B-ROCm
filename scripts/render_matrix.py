@@ -6,6 +6,12 @@ import os
 
 
 def _row(c, base=None):
+    # Guard: a pathological study1/study3 cell (no metrics) would TypeError on
+    # the f-string below. None exist by design today, but mirror _study2's
+    # handling so a future one renders a warning instead of crashing.
+    if c.get("pathological"):
+        return (f'| {c["weight"]} | {"DFlash" if c["dflash"] else "baseline"} | '
+                f'⚠ **PATHOLOGICAL — did not complete** | — | — | — | — | — |')
     m = c["metrics"]
     mem = c["mem"]
     toks = f'{m["agg_tok_s"]:.1f}'

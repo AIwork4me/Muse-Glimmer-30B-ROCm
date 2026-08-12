@@ -42,6 +42,11 @@ class _FakeResp:
     async def __aexit__(self, *a):
         return False
 
+    def raise_for_status(self):
+        # Real aiohttp raises ClientResponseError on 4xx/5xx; the fake session
+        # only ever emits success streams, so this is a no-op.
+        return None
+
 
 class _FakeSession:
     """Records the POST body and emits the usage chunk ONLY when the client set

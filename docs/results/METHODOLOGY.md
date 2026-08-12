@@ -146,7 +146,7 @@ prepend the fixed test image to the user message.
 
 | Metric | Definition | How captured |
 |---|---|---|
-| **decode tok/s (Study 1)** | total tokens generated ÷ generation-phase wall (first→last token) | counted from the SSE stream per-request; cross-checked vs server `usage.completion_tokens`. Includes reasoning tokens — by definition the total decode rate of the model. |
+| **decode tok/s (Study 1)** | `Σ generated tokens ÷ max per-request wall (t1−t0)` — the same formula used for Study 2/3 (decode-dominated at np=1; prefill negligible — `llama-bench` tg128 confirms) | counted from the SSE stream per-request; cross-checked vs server `usage.completion_tokens`. Includes reasoning tokens — by definition the total decode rate of the model. |
 | **aggregate tok/s (Study 2/3)** | `Σ generated tokens across all concurrent requests ÷ max per-request wall` | per-request stream counts, summed; matches the v1 harness so cross-run comparisons hold |
 | **TTFT** | request send → first streamed chunk; **p50 and p90** reported | `time.perf_counter()` around the SSE stream; loopback HTTP overhead negligible |
 | **TPOT** | `(first→last token wall) ÷ (tokens after first)`; **per-request median** reported | inter-chunk timestamps from the stream — the core DFlash metric (it lowers per-token decode cost) |

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Derive exact llama-server flags + client params from a cell config (pure).
+"""Derive exact llama-server flags from a cell config (pure).
 
 Single source of truth for the matrix's flag logic. CI-tested; called by
-gguf-bench-cell.sh. Usage:  python3 gguf_bench_args.py <cell.json> server|client
+gguf-bench-cell.sh. Usage:  python3 gguf_bench_args.py <cell.json> [server]
 """
 import json
 import sys
@@ -70,23 +70,9 @@ def build_server_args(cell):
     return args
 
 
-def build_client_args(cell):
-    st = STUDY[cell["study"]]
-    return {
-        "endpoint": st["endpoint"],
-        "temp": st["temp"],
-        "top_p": st["top_p"],
-        "top_k": st["top_k"],
-        "max_tokens": st["max_tokens"],
-        "reasoning_strength": st["reasoning_strength"],
-        "seed": cell["seed"],
-        "np": cell["np"],
-        "prompt_set": "muse-glimmer-diverse",
-    }
-
-
 if __name__ == "__main__":
     cell = json.loads(sys.argv[1])
-    which = sys.argv[2] if len(sys.argv) > 2 else "server"
-    out = build_server_args(cell) if which == "server" else build_client_args(cell)
-    print(json.dumps(out))
+    # Only the `server` path is used by the cell script (gguf-bench-cell.sh);
+    # client params are sourced from the .conf files and passed to bench_client
+    # via argparse, independently exercised by test_gguf_configs.py.
+    print(json.dumps(build_server_args(cell)))

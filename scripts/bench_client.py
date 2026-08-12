@@ -136,6 +136,10 @@ async def stream_one(session, base, payload):
     # tpot_median. Require the usage chunk so metrics are real.
     body["stream_options"] = {"include_usage": True}
     async with session.post(url, json=body) as r:
+        # Surface server errors (5xx etc.) explicitly. Without this a server
+        # failure yields an empty read → n_tokens falls back to 1 → a corrupt
+        # "fast" cell. The legacy one() path already reads JSON + raises.
+        r.raise_for_status()
         async for raw in r.content:
             line = raw.decode(errors="ignore").strip()
             if not line.startswith("data:"):
