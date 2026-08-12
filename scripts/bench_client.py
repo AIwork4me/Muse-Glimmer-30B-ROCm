@@ -186,7 +186,16 @@ async def run_cell(base, cell_args, prompts, image_b64=None):
     rep — so the caller can take the median + report min/max (spec §6.2)."""
     conc = cell_args["np"]
     per_rep = []
-    async with aiohttp.ClientSession() as s:
+    # High-concurrency cells (np=16) on a 30B APU model can keep a single request
+    # decoding for >5 min under batch contention; the aiohttp DEFAULT total=300s
+    # aborts those slow-but-valid streams mid-read (verified 2026-08-12: the first
+    # two c=16 cells died here with TimeoutError while the server stayed alive).
+    # Lift the ceiling: no total cap (a legitimate 512-token decode at c=16 may
+    # take 10+ min), but abort if NO bytes arrive for 600s (a dead server). This
+    # does NOT change the measurement — ttft/tpot/agg_tok_s come from perf_counter
+    # markers in stream_one, independent of this client-side ceiling.
+    timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=600)
+    async with aiohttp.ClientSession(timeout=timeout) as s:
         for _ in range(cell_args.get("warmup", 2)):
             await asyncio.gather(*[stream_one(s, base, _payload(cell_args, prompts[0]["text"], image_b64))
                                    for _ in range(conc)])
