@@ -63,6 +63,13 @@ def scrape_metrics(text):
     DERIVED as `num_accepted_tokens_total / num_drafts_total` (drafts = the
     count of speculative verification steps, the correct per-step denominator —
     not the draft-TOKEN count). Returns null when num_drafts_total is 0/absent.
+
+    NOTE (2026-08-12 DFlash fix): on the current build the /metrics spec
+    counters stay 0 even when spec-decoding is ACTIVE — a build-instrumentation
+    gap. The AUTHORITATIVE acceptance source is therefore the server log's
+    per-slot print_timing line, parsed by `parse_draft_acceptance`. This
+    function is retained as a secondary source for future builds that populate
+    /metrics correctly.
     """
     def grab(*names):
         for name in names:
@@ -88,12 +95,52 @@ def scrape_metrics(text):
     return out
 
 
+# Matches the per-slot print_timing line emitted by llama-server, e.g.
+#   slot print_timing: id  0 | task 0 | draft acceptance = 0.14996
+#       (  175 accepted /  1167 generated), mean len =   3.19
+# Tolerates variable whitespace and labels. `mean len` is the average number of
+# accepted tokens per verification STEP for that slot.
+_DRAFT_ACCEPT_RE = re.compile(
+    r"draft acceptance\s*=\s*([0-9.]+)\s*\(\s*(\d+)\s*accepted\s*/\s*(\d+)\s*generated\s*\)"
+    r",\s*mean len\s*=\s*([0-9.]+)"
+)
+
+
+def parse_draft_acceptance(log_text):
+    """Sum speculative-draft acceptance across ALL print_timing lines in the
+    llama-server log. Returns:
+      {"accepted_draft_tokens": <sum accepted int>,
+       "draft_tokens":          <sum generated int>,
+       "acceptance_rate":       <sum accepted / sum generated or None>,
+       "avg_accepted_per_step": <mean of per-line `mean len` or None>}
+    On empty input or no match -> all values None, never raises. This is the
+    AUTHORITATIVE acceptance source for DFlash cells (the /metrics spec counters
+    are unpopulated on the current build).
+    """
+    matches = _DRAFT_ACCEPT_RE.findall(log_text or "")
+    if not matches:
+        return {"accepted_draft_tokens": None, "draft_tokens": None,
+                "acceptance_rate": None, "avg_accepted_per_step": None}
+    sum_accepted = sum(int(m[1]) for m in matches)
+    sum_generated = sum(int(m[2]) for m in matches)
+    mean_lens = [float(m[3]) for m in matches]
+    rate = (sum_accepted / sum_generated) if sum_generated else None
+    avg_per_step = sum(mean_lens) / len(mean_lens) if mean_lens else None
+    return {
+        "accepted_draft_tokens": sum_accepted,
+        "draft_tokens": sum_generated,
+        "acceptance_rate": rate,
+        "avg_accepted_per_step": avg_per_step,
+    }
+
+
 if __name__ == "__main__":
     # CLI modes:
     #   capture_proc.py status <pid>   -> /proc/<pid>/status memory fields
     #   capture_proc.py power          -> rocm-smi power/temp (stdin, or calls rocm-smi)
     #   capture_proc.py vram           -> rocm-smi VRAM (stdin, or calls rocm-smi)
     #   capture_proc.py metrics        -> llama-server /metrics acceptance (stdin)
+    #   capture_proc.py draft          -> llama-server LOG acceptance (stdin, PRIMARY)
     import subprocess
     mode = sys.argv[1] if len(sys.argv) > 1 else "status"
     if mode == "status":
@@ -116,3 +163,5 @@ if __name__ == "__main__":
         print(json.dumps(parse_rocm_smi_vram(txt)))
     elif mode == "metrics":
         print(json.dumps(scrape_metrics(sys.stdin.read())))
+    elif mode == "draft":
+        print(json.dumps(parse_draft_acceptance(sys.stdin.read())))

@@ -46,11 +46,22 @@ METRICS=$(uv run --no-sync python scripts/bench_client.py http://127.0.0.1:8080 
 MEM=$(python3 scripts/capture_proc.py status "$SRV_PID" 2>/dev/null || echo '{"error":"proc unreadable"}')
 VRAM=$(rocm-smi --showmeminfo vram --json 2>/dev/null | python3 scripts/capture_proc.py vram 2>/dev/null || echo '{}')
 POWER=$(rocm-smi --showpower --showtemp --json 2>/dev/null | python3 scripts/capture_proc.py power 2>/dev/null || echo '{}')
-ACC=$(curl -s http://127.0.0.1:8080/metrics 2>/dev/null | python3 scripts/capture_proc.py metrics 2>/dev/null || echo 'null')
 
-# TOP-RISK probe (spec): does /metrics expose the speculative/draft counters
-# needed for DFlash cells in Task 11? Report whatever is present.
-echo "=== /metrics spec/draft counters (TOP-RISK probe) ==="
+# Acceptance capture. PRIMARY source is the server LOG's per-slot print_timing
+# line (parse_draft_acceptance): on build 0b1bad1 the /metrics spec counters
+# stay 0 even when spec-decoding is ACTIVE (build-instrumentation gap, verified
+# 2026-08-12 on gfx1151), so the log is authoritative. /metrics is retained as
+# a SECONDARY fallback field (populated below, emitted only if non-empty).
+# NB: parse $LOG before the `rm -f "$LOG"` at the end of the script.
+ACC_LOG=$(python3 scripts/capture_proc.py draft < "$LOG" 2>/dev/null || echo 'null')
+ACC_METRICS=$(curl -s http://127.0.0.1:8080/metrics 2>/dev/null | python3 scripts/capture_proc.py metrics 2>/dev/null || echo 'null')
+
+# TOP-RISK probe (resolved 2026-08-12): /metrics DOES expose spec/draft
+# counters, but they stay 0 even when spec-decoding is active (build
+# instrumentation gap). Acceptance is therefore parsed from the SERVER LOG
+# above (ACC_LOG). This probe is retained as a live diagnostic of which
+# counters the running build emits.
+echo "=== /metrics spec/draft counters (diagnostic; known to read 0 on 0b1bad1) ==="
 curl -s http://127.0.0.1:8080/metrics 2>/dev/null | grep -iE 'spec|draft' | head || echo "  (none found)"
 echo "=== end probe ==="
 
@@ -61,9 +72,9 @@ WGT=$(grep -oE 'model size[^0-9]*[0-9.]+ (MiB|GiB|MB|GB)' "$LOG" | tail -1 || tr
 
 OUT="docs/results/matrix/cell-${STUDY}-${WEIGHT}-np${NP}-df${DFLASH}-vis${VISION}.json"
 mkdir -p docs/results/matrix
-python3 - "$OUT" "$STUDY" "$WEIGHT" "$DFLASH" "$VISION" "$NP" "$MEM" "$VRAM" "$METRICS" "$ACC" "$POWER" "$WGT" "$SRV_ARGS" "$SEED" "$REPS" <<'PY'
+python3 - "$OUT" "$STUDY" "$WEIGHT" "$DFLASH" "$VISION" "$NP" "$MEM" "$VRAM" "$METRICS" "$ACC_LOG" "$ACC_METRICS" "$POWER" "$WGT" "$SRV_ARGS" "$SEED" "$REPS" <<'PY'
 import json, sys, subprocess, datetime, os
-(out, study, weight, df, vis, np_, mem, vram, metrics, acc, power, wgt, flags, seed, reps) = sys.argv[1:]
+(out, study, weight, df, vis, np_, mem, vram, metrics, acc_log, acc_metrics, power, wgt, flags, seed, reps) = sys.argv[1:]
 rocm = subprocess.run("rocm-smi --showproductname --json".split(), capture_output=True, text=True).stdout.strip()
 # mem merges /proc/<pid>/status (VmPeak/VmHWM/VmRSS/RssShmem — host-side) with
 # GPU VRAM. On Strix Halo the GGUF is mmap'd + GPU-offloaded, so VmHWM (~1 GiB)
@@ -71,12 +82,34 @@ rocm = subprocess.run("rocm-smi --showproductname --json".split(), capture_outpu
 # the GPU carveout. All three together describe the real footprint.
 mem_rec = json.loads(mem)
 mem_rec.update(json.loads(vram) if vram else {})
+
+# Acceptance source selection: the server log's print_timing line is PRIMARY
+# (authoritative); /metrics is a secondary fallback for future builds that
+# populate it. A record counts as "present" when it has a non-null
+# accepted_draft_tokens count (baseline cells legitimately have none).
+def _has_acc(d):
+    return bool(d) and d.get("accepted_draft_tokens") is not None
+
+acc_log_d = json.loads(acc_log) if acc_log != "null" else None
+acc_metrics_d = json.loads(acc_metrics) if acc_metrics != "null" else None
+if _has_acc(acc_log_d):
+    acceptance, acceptance_source = acc_log_d, "log"
+elif _has_acc(acc_metrics_d):
+    acceptance, acceptance_source = acc_metrics_d, "metrics"
+else:
+    acceptance, acceptance_source = (acc_log_d or acc_metrics_d), None
+
 rec = {"study": study, "weight": weight, "dflash": df=="1", "vision": vis=="1", "np": int(np_),
-       "metrics": json.loads(metrics), "mem": mem_rec, "acceptance": json.loads(acc) if acc!="null" else None,
+       "metrics": json.loads(metrics), "mem": mem_rec, "acceptance": acceptance,
+       "acceptance_source": acceptance_source,
        "power_temp": json.loads(power) if power else {}, "llama_log_mem": wgt,
        "manifest": {"flags": flags, "seed": int(seed), "reps": int(reps), "build": "0b1bad1",
                     "rocm": rocm, "kernel": os.popen("uname -r").read().strip(),
                     "date": datetime.date.today().isoformat()}}
+# Secondary /metrics-derived acceptance: emit only when it carries non-null
+# data AND differs from the chosen primary (avoids a redundant duplicate).
+if _has_acc(acc_metrics_d) and acc_metrics_d != acceptance:
+    rec["acceptance_metrics_secondary"] = acc_metrics_d
 json.dump(rec, open(out, "w"), indent=2)
 print("wrote", out)
 PY

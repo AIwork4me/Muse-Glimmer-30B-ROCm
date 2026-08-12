@@ -14,6 +14,13 @@ WEIGHTS = {
 DEFAULT_DFLASH = "models/dflash-kquant.gguf"
 DEFAULT_MMPROJ = "models/mmproj-kquant.gguf"
 
+# Measured sweet spot for `--spec-draft-n-max` on gfx1151 (Strix Halo):
+# n_max=3 ->1.14x, n_max=8 ->1.51x, n_max=16 ->1.60x (16.7 tok/s vs 10.46
+# baseline), n_max=32 caps at 16 because 16 is the DFlash block_size. So 16
+# maximizes the speedup without wasting draft compute. Keep in sync with the
+# acceptance-capture path in gguf-bench-cell.sh.
+SPEC_DRAFT_N_MAX = 16
+
 # Per-study client/sampling defaults (spec §5).
 STUDY = {
     "study1": {"temp": 0, "top_p": 1.0, "top_k": 0, "max_tokens": 256,
@@ -51,7 +58,13 @@ def build_server_args(cell):
     if st["temp"] == 1.0:
         args += ["--top-p", str(st["top_p"]), "--top-k", str(st["top_k"])]
     if cell.get("dflash"):
-        args += ["-md", cell.get("dflash_path", DEFAULT_DFLASH), "-ngld", "99"]
+        # `-md <dflash>` alone loads the draft model but does NOT enable
+        # speculative decoding — `llama-server --spec-type` defaults to `none`,
+        # which yields 0 drafts and a 1.00x speedup (verified on gfx1151).
+        # Explicitly select the draft-dflash speculator and the tuned n_max.
+        args += ["-md", cell.get("dflash_path", DEFAULT_DFLASH), "-ngld", "99",
+                 "--spec-type", "draft-dflash",
+                 "--spec-draft-n-max", str(SPEC_DRAFT_N_MAX)]
     if cell.get("vision"):
         args += ["--mmproj", cell.get("mmproj_path", DEFAULT_MMPROJ)]
     return args

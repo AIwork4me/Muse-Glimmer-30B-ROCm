@@ -2,7 +2,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-from capture_proc import parse_proc_status, parse_rocm_smi_power, parse_rocm_smi_vram, scrape_metrics
+from capture_proc import parse_proc_status, parse_rocm_smi_power, parse_rocm_smi_vram, scrape_metrics, parse_draft_acceptance
 
 PROC = """Name:   llama-server
 VmPeak:   23499232 kB
@@ -124,3 +124,72 @@ def test_parse_rocm_smi_vram():
     d = parse_rocm_smi_vram(VRAM)
     assert d["vram_used_mib"] == round(18253611008 / 1024 / 1024, 1)
     assert d["vram_total_mib"] == round(34359738368 / 1024 / 1024, 1)
+
+
+# Authoritative acceptance source per the 2026-08-12 DFlash enablement fix:
+# /metrics spec counters stay 0 even when spec-decoding is active (build
+# instrumentation gap), so the SERVER LOG's per-slot print_timing line is the
+# primary source. Format (build 0b1bad1):
+#   ... slot print_timing: id  0 | task 0 | draft acceptance = 0.14996
+#       (  175 accepted /  1167 generated), mean len =   3.19
+DRAFT_LOG = """\
+info: work loaded
+slot update      id:  0 task: 0 ...
+slot print_timing: id  0 | task 0 | draft acceptance = 0.14996 (  175 accepted /  1167 generated), mean len =   3.19
+slot print_timing: id  0 | task 0 | draft acceptance = 0.20000 (  200 accepted /  1000 generated), mean len =   4.00
+wrap up
+"""
+
+
+def test_parse_draft_acceptance_multi_line_sums():
+    """Two print_timing lines: accepted and generated must SUM across lines;
+    acceptance_rate is the pooled ratio (sum/sum), avg_accepted_per_step is the
+    arithmetic mean of the per-line `mean len` values."""
+    d = parse_draft_acceptance(DRAFT_LOG)
+    assert d["accepted_draft_tokens"] == 375       # 175 + 200
+    assert d["draft_tokens"] == 2167               # 1167 + 1000
+    assert d["acceptance_rate"] is not None
+    assert abs(d["acceptance_rate"] - 375 / 2167) < 1e-9
+    assert d["avg_accepted_per_step"] is not None
+    assert abs(d["avg_accepted_per_step"] - (3.19 + 4.00) / 2) < 1e-9
+
+
+def test_parse_draft_acceptance_single_line():
+    ONE = ("slot print_timing: id  0 | task 0 | "
+           "draft acceptance = 0.14996 (  175 accepted /  1167 generated), mean len =   3.19\n")
+    d = parse_draft_acceptance(ONE)
+    assert d["accepted_draft_tokens"] == 175
+    assert d["draft_tokens"] == 1167
+    assert abs(d["acceptance_rate"] - 175 / 1167) < 1e-9
+    assert abs(d["avg_accepted_per_step"] - 3.19) < 1e-9
+
+
+def test_parse_draft_acceptance_empty_returns_none():
+    """No print_timing lines -> all fields None, no crash, no NaN."""
+    d = parse_draft_acceptance("")
+    assert d["accepted_draft_tokens"] is None
+    assert d["draft_tokens"] is None
+    assert d["acceptance_rate"] is None
+    assert d["avg_accepted_per_step"] is None
+
+
+def test_parse_draft_acceptance_no_match_returns_none():
+    """Log present but no draft-acceptance lines (e.g. baseline cell): no crash,
+    all None. Crucially a baseline must NOT be misread as a 0-token DFlash run."""
+    d = parse_draft_acceptance("server started\nserver idle\nno spec lines here\n")
+    assert d["accepted_draft_tokens"] is None
+    assert d["draft_tokens"] is None
+    assert d["acceptance_rate"] is None
+    assert d["avg_accepted_per_step"] is None
+
+
+def test_parse_draft_acceptance_zero_generated_no_nan():
+    """Defensive: a pathological `0 generated` line must not produce a NaN or
+    ZeroDivisionError. acceptance_rate is null when total generated is 0."""
+    ZERO = ("slot print_timing: id  0 | task 0 | "
+            "draft acceptance = 0.00000 (  0 accepted /  0 generated), mean len =   0.00\n")
+    d = parse_draft_acceptance(ZERO)
+    assert d["accepted_draft_tokens"] == 0
+    assert d["draft_tokens"] == 0
+    assert d["acceptance_rate"] is None   # 0/0 undefined
+    assert d["avg_accepted_per_step"] == 0.0

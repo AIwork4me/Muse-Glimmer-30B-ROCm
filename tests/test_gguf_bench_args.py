@@ -35,6 +35,20 @@ def test_dflash_adds_draft_model():
     s = " ".join(a)
     assert "-md models/dflash-kquant.gguf" in s
     assert "-ngld 99" in s
+    # Spec-decoding MUST be explicitly enabled: `-md <dflash>` alone loads the
+    # draft model but `--spec-type` defaults to `none`, so 0 drafts are proposed
+    # (regression observed on gfx1151: 10.5 tok/s, 1.00x speedup).
+    assert "--spec-type draft-dflash" in s
+    assert "--spec-draft-n-max 16" in s   # measured sweet spot (= block_size)
+
+
+def test_dflash_spec_flags_absent_on_baseline():
+    """Baseline cells must NOT carry any spec-decoding flags."""
+    a = build_server_args(_cell(dflash=False))
+    s = " ".join(a)
+    assert "--spec-type" not in s
+    assert "--spec-draft-n-max" not in s
+    assert "-md" not in s
 
 
 def test_study2_load_uses_temp_1_and_scales_ctx():
