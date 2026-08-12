@@ -1,0 +1,61 @@
+{
+  "study": "study2",
+  "weight": "dynamic",
+  "dflash": true,
+  "vision": false,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 19.890898263367422,
+    "total_tokens": 3000,
+    "wall_s": 150.822751204003,
+    "ttft_p50": 0.516769841502537,
+    "ttft_p90": 0.6077612865010451,
+    "tpot_median": 0.052113456395315165,
+    "agg_tok_s_min": 19.88175375031095,
+    "agg_tok_s_max": 20.00117770801301,
+    "reps": 5,
+    "finish_reason_dist": {
+      "length": 25,
+      "stop": 5
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 31499940,
+    "VmPeak_gib": 30.04,
+    "VmHWM_kib": 2368300,
+    "VmHWM_gib": 2.26,
+    "VmRSS_kib": 2368300,
+    "VmRSS_gib": 2.26,
+    "RssShmem_kib": 65536,
+    "RssShmem_gib": 0.06,
+    "vram_used_mib": 1090.3,
+    "vram_total_mib": 32768.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 11869,
+    "draft_tokens": 61133,
+    "acceptance_rate": 0.1941504588356534,
+    "avg_accepted_per_step": 4.0165625
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": null,
+    "temp_c": 62.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-dynamic.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 16",
+    "seed": 42,
+    "reps": 5,
+    "build": "0b1bad1",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Graphics\", \"Card Model\": \"0x1586\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"STRXLGEN\", \"Subsystem ID\": \"-0x72ff\", \"Device Rev\": \"0xd1\", \"Node ID\": \"1\", \"GUID\": \"21984\", \"GFX Version\": \"gfx1151\"}}",
+    "kernel": "6.17.0-1032-oem",
+    "date": "2026-08-12"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 11869.0,
+    "draft_tokens": 61133.0,
+    "avg_accepted_per_step": 2.8829244595579304,
+    "acceptance_rate": 0.1941504588356534
+  }
+}

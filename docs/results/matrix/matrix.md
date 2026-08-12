@@ -13,4 +13,18 @@
 
 | weight | np | mode | agg tok/s | TTFT p90 (s) | TPOT med (s) | peak RSS (GiB) | acceptance |
 |---|---|---|---|---|---|---|---|
+| 17gb | 1 | baseline | 10.5 | 0.55 | 0.0942 | 1.5 | — |
+| 17gb | 1 | DFlash | 22.3 | 0.57 | 0.0435 | 2.2 | 21% |
+| 17gb | 4 | baseline | 15.6 | 1.14 | 0.1778 | 3.7 | — |
+| 17gb | 4 | DFlash | 27.3 | 1.25 | 0.1066 | 7.7 | 18% |
+| dynamic | 1 | baseline | 9.1 | 0.60 | 0.1091 | 1.5 | — |
+| dynamic | 1 | DFlash | 19.9 | 0.61 | 0.0521 | 2.3 | 19% |
+| dynamic | 4 | baseline | 20.9 | 1.27 | 0.1809 | 3.0 | — |
+| dynamic | 4 | DFlash | 28.2 | 1.34 | 0.1212 | 6.5 | 19% |
+| dynamic | 16 | baseline | 31.0 | 3.37 | 0.2366 | 9.5 | — |
+
+### Study 3 — Vision axis (temp 1.0, mmproj + test image) — memory delta vs text-only
+
+| weight | np | mode | agg tok/s | TTFT p90 (s) | TPOT med (s) | VRAM (MiB) | VmPeak (GiB) | acceptance |
+|---|---|---|---|---|---|---|---|---|
 
