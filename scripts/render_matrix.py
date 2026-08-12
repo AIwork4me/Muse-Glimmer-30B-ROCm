@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Render matrix cell-result JSONs into a markdown report (pure)."""
+import glob
+import json
+import os
+import sys
+
+
+def _row(c, base=None):
+    m = c["metrics"]
+    mem = c["mem"]
+    toks = f'{m["agg_tok_s"]:.1f}'
+    speedup = ""
+    if base and base > 0:
+        speedup = f'{m["agg_tok_s"] / base:.2f}x'
+    acc = c.get("acceptance") or {}
+    acc_s = f'{int(round(acc["acceptance_rate"] * 100))}%' if acc.get("acceptance_rate") is not None else "—"
+    return (f'| {c["weight"]} | {"DFlash" if c["dflash"] else "baseline"} | '
+            f'{toks} | {m["ttft_p50"]:.2f} | {m["tpot_median"]:.4f} | '
+            f'{mem["VmHWM_gib"]:.1f} | {speedup or "—"} | {acc_s} |')
+
+
+def _study1(cells):
+    out = ["### Study 1 — DFlash anchor (greedy, batch 1, diverse prompt set) — Meta-comparable\n",
+           "| weight | mode | tok/s | TTFT p50 (s) | TPOT (s) | peak RSS (GiB) | Speedup | draft acceptance |",
+           "|---|---|---|---|---|---|---|---|"]
+    for w in ("17gb", "dynamic"):
+        base = next((c["metrics"]["agg_tok_s"] for c in cells
+                     if c["weight"] == w and not c["dflash"]), None)
+        for c in [x for x in cells if x["weight"] == w and x.get("study") == "study1"]:
+            out.append(_row(c, base))
+    return "\n".join(out)
+
+
+def _study2(cells):
+    out = ["### Study 2 — Throughput under load (temp 1.0) — NOT Meta-comparable\n",
+           "| weight | np | mode | agg tok/s | TTFT p90 (s) | TPOT med (s) | peak RSS (GiB) | acceptance |",
+           "|---|---|---|---|---|---|---|---|"]
+    for c in sorted([x for x in cells if x.get("study") == "study2"],
+                    key=lambda x: (x["weight"], x["np"], x["dflash"])):
+        m = c["metrics"]
+        acc = c.get("acceptance") or {}
+        acc_s = f'{int(round(acc["acceptance_rate"] * 100))}%' if acc.get("acceptance_rate") is not None else "—"
+        out.append(f'| {c["weight"]} | {c["np"]} | {"DFlash" if c["dflash"] else "baseline"} | '
+                   f'{m["agg_tok_s"]:.1f} | {m["ttft_p90"]:.2f} | {m["tpot_median"]:.4f} | '
+                   f'{c["mem"]["VmHWM_gib"]:.1f} | {acc_s} |')
+    return "\n".join(out)
+
+
+def render_studies(cells):
+    if not cells:
+        return "# Matrix report\n\n(no cells)\n"
+    return "# llama.cpp benchmark matrix\n\n" + "\n\n".join(
+        f for f in (_study1(cells), _study2(cells)) if f.count("\n") > 2) + "\n"
+
+
+if __name__ == "__main__":
+    cells = [json.load(open(p)) for p in
+             sorted(glob.glob(os.path.join(os.path.dirname(__file__), "..", "docs", "results", "matrix", "cell-*.json")))]
+    print(render_studies(cells))
