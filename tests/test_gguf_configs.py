@@ -12,6 +12,8 @@ def _load(name):
         m = re.match(r'^([A-Z_]+)=(.*)$', line)
         if m:
             value = m.group(2).strip()
+            # Strip inline shell comments before quote handling
+            value = value.split('#', 1)[0].rstrip()
             # Only strip surrounding quotes if the entire value is wrapped in them
             if (value.startswith('"') and value.endswith('"')) or \
                (value.startswith("'") and value.endswith("'")):
@@ -28,6 +30,8 @@ def test_study1_greedy_single_weight_set():
     assert d["PER_SLOT_CTX"] == "8192"
     assert "17gb" in d["WEIGHTS"] and "dynamic" in d["WEIGHTS"]
     assert d["NPS"] == "1"
+    assert d["SEED"] == "0"
+    assert d["REPS"] == "3"
 
 
 def test_study2_load_concurrency():
@@ -36,9 +40,14 @@ def test_study2_load_concurrency():
     assert d["MAX_TOKENS"] == "512"
     assert d["REPS"] == "5"
     assert d["NPS"] == "1 4 16"
+    assert d["SEED"] == "42"
 
 
 def test_study3_vision_has_mmproj_flag():
     d = _load("study3.conf")
     assert d["VISION"] == "1"
     assert d["NPS"] == "1 4"
+    assert d["TEMP"] == "1.0"
+    assert d["MAX_TOKENS"] == "512"
+    assert d["SEED"] == "42"
+    assert d["REPS"] == "3"
