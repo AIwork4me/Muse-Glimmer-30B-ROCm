@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm/schemas/public-claims.schema.json",
+  "title": "Public claim boundary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "validated_stack", "artifact_manifest", "validated_platform", "reference_evidence", "forward_validation", "hardware_matrix"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "validated_stack": {"const": "configs/validated-stack.json"},
+    "artifact_manifest": {"const": "configs/artifact-manifest.json"},
+    "validated_platform": {"$ref": "#/$defs/platformClaim"},
+    "reference_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rocm", "status", "matrix"],
+      "properties": {
+        "rocm": {"const": "7.2.1"},
+        "status": {"const": "validated-historical-reference"},
+        "matrix": {"const": "docs/results/matrix/"}
+      }
+    },
+    "forward_validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rocm", "status", "manifest", "tracks"],
+      "properties": {
+        "rocm": {"const": "7.14.0"},
+        "status": {"const": "partially-validated"},
+        "manifest": {"const": "configs/rocm-7.14-gguf-validation.json"},
+        "tracks": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "status", "scope", "evidence"],
+            "properties": {
+              "name": {"enum": ["GGUF/llama.cpp", "BF16/vLLM"]},
+              "status": {"enum": ["project-validated", "pending"]},
+              "scope": {"type": "string", "minLength": 1},
+              "evidence": {
+                "oneOf": [
+                  {"const": "docs/results/matrix-714/"},
+                  {"type": "null"}
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "hardware_matrix": {
+      "type": "array",
+      "minItems": 4,
+      "items": {"$ref": "#/$defs/platformClaim"}
+    }
+  },
+  "$defs": {
+    "platformClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hardware", "gpu_arch", "status"],
+      "properties": {
+        "hardware": {"type": "string", "minLength": 1},
+        "gpu_arch": {"type": "string", "minLength": 1},
+        "status": {"enum": ["validated", "community-validated", "planned", "upstream-recipe"]}
+      }
+    }
+  }
+}

@@ -1,31 +1,40 @@
-name: ci
+name: fast-ci
 on: [push, pull_request]
 
 permissions:
   contents: read
 
 jobs:
-  static:
-    # CI has no gfx1151, so this job runs only the no-GPU/no-server tests:
-    # script + config linting and the banned-adaptation-flag scan. GPU and
-    # server tests are marked `gpu`/`server` and run locally (scripts/03-*).
+  no-gpu:
+    # This job intentionally installs only the CPU-safe `ci` dependency group.
+    # The TheRock/ROCm lock is checked separately in dependency-smoke.yml.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
         with:
+          version: "0.12.3"
           enable-cache: true
+          cache-dependency-glob: uv.lock
 
-      - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Sync lightweight CI dependencies
+        run: uv sync --only-group ci --locked
 
-      # Validates pyproject resolves and the TheRock gfx1151 wheel installs
-      # (install does not require an AMD GPU; execution does). vLLM itself is
-      # source-built and not part of this sync — the no-GPU tests don't import it.
-      - name: Sync project
-        run: uv sync --dev --locked
+      - name: Assert GPU runtime is not installed
+        run: uv run --no-sync python -c "import importlib.util; assert importlib.util.find_spec('torch') is None"
 
-      - name: No-GPU tests (script/config lint + banned-flag scan)
-        run: uv run pytest -m "not gpu and not server" -v
+      - name: Bash syntax
+        run: bash -n scripts/*.sh scripts/lib/*.sh
+
+      - name: ShellCheck
+        run: uv run --no-sync shellcheck -x scripts/*.sh scripts/lib/*.sh
+
+      - name: GitHub Actions semantics
+        run: uv run --no-sync actionlint
+
+      - name: No-GPU tests
+        run: uv run --no-sync pytest -m "not gpu and not server" -v

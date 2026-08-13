@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software or its benchmark evidence, cite this repository and
+  include the exact Git commit and validated-stack manifest in your work.
+title: Muse-Glimmer-30B-ROCm
+type: software
+authors:
+  - family-names: AIwork4me
+version: 0.1.0
+repository-code: https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm
+url: https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm
+license: Apache-2.0
+keywords:
+  - AMD ROCm
+  - RDNA
+  - Ryzen AI
+  - Radeon
+  - Muse-Glimmer-30B
+  - reproducible inference

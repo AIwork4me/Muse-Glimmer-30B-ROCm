@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "status": "validated-scoped",
+  "validated_on": "2026-08-13",
+  "scope": {
+    "inference_path": "llama.cpp GGUF",
+    "completed_cells": 17,
+    "planned_cells": 21,
+    "deferred_cells": [
+      "study2/17gb/baseline/np16",
+      "study2/17gb/dflash/np16",
+      "study2/dynamic/baseline/np16",
+      "study2/dynamic/dflash/np16"
+    ],
+    "vllm_bf16_status": "pending"
+  },
+  "platform": {
+    "hardware": "AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S",
+    "gpu_arch": "gfx1151",
+    "architecture_family": "RDNA 3.5",
+    "memory": "94 GiB unified LPDDR5X"
+  },
+  "host": {
+    "kernel": "6.17.0-1032-oem",
+    "rocm_version": "7.14.0",
+    "distribution_target": "gfx1151",
+    "distribution_scope": "Official AMD gfx1151 tarball; AMD release notes do not list this exact Ryzen AI MAX+ PRO 395 SKU",
+    "archive": {
+      "url": "https://repo.amd.com/rocm/tarball-multi-arch/therock-dist-linux-gfx1151-7.14.0.tar.gz",
+      "size_bytes": 1713449440,
+      "sha256": "2567d5e34e470db104a62a02c36aa770cb0430175e48c1c46df0eefc05e1d77c"
+    },
+    "release_notes": {
+      "url": "https://rocm.docs.amd.com/en/docs-7.14.0/about/release-notes.html",
+      "date": "2026-07-15"
+    }
+  },
+  "runtime": {
+    "hip_version": "7.14.60850-0000000",
+    "llvm_version": "46fcb339fb61119b337f973c7ca9e710a319fdd0+PATCHED:440716f8b87be9d8e20ed910e10e5b6d14d57cf6"
+  },
+  "llama_cpp": {
+    "source_repo": "https://github.com/ggml-org/llama.cpp.git",
+    "commit": "0b1bad14ff204627636aeb1de22ddcd5acb859d4",
+    "build_arch": "gfx1151",
+    "cmake_flags": ["-DGGML_HIP=ON", "-DAMDGPU_TARGETS=gfx1151"],
+    "retained_binary_sha256": "03bb0d033e7f8cfd1b9e86197aa2fc7cfd65ff32878d239bda2bc00f359fc56b",
+    "retained_libggml_hip_sha256": "880f0e7e8c06abb809568a1ae96568b906b4b86594e863cd464328094411165e"
+  },
+  "model": {
+    "repository": "meta-models/Muse-Glimmer-30B-GGUF",
+    "revision": "a0532f7263ee67f1e0a5f5c5fdcd50dd62fc9aa4",
+    "artifact_manifest": "configs/artifact-manifest.json",
+    "artifact_manifest_sha256_at_run": "d5d574ec6d14b64a06f7e3ecb4781a6f505a4d8088379c74432f5383bcf5f56b"
+  },
+  "reference_stack": {
+    "manifest": "configs/validated-stack.json",
+    "manifest_sha256_at_run": "8cdd7894b3c138ecfd25c90bfdc6479e2d03fe956135df8b10a2986a1002c788",
+    "rocm_version": "7.2.1"
+  },
+  "evidence": {
+    "repository_base_commit": "97882c40347329b7d7b471bf1a586f7481e18494",
+    "evidence_commit": "1677fb42d57c6c06c2004f6e99150b6037dc4db3",
+    "matrix": "docs/results/matrix-714/",
+    "checksums": "docs/results/matrix-714/SHA256SUMS",
+    "comparison": "docs/results/matrix-714/comparison.md",
+    "methodology": "docs/results/METHODOLOGY.md"
+  },
+  "stability_observation": {
+    "duration_hours": 6,
+    "status": "operator-observed-no-incidents",
+    "system_log_retained": false,
+    "qualification": "Not a standalone stability qualification; raw dmesg/amdgpu logs were not retained"
+  }
+}

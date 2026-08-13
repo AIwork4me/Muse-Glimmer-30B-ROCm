@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "validated_stack": "configs/validated-stack.json",
+  "artifact_manifest": "configs/artifact-manifest.json",
+  "validated_platform": {
+    "hardware": "AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S",
+    "gpu_arch": "gfx1151",
+    "status": "validated"
+  },
+  "reference_evidence": {
+    "rocm": "7.2.1",
+    "status": "validated-historical-reference",
+    "matrix": "docs/results/matrix/"
+  },
+  "forward_validation": {
+    "rocm": "7.14.0",
+    "status": "partially-validated",
+    "manifest": "configs/rocm-7.14-gguf-validation.json",
+    "tracks": [
+      {
+        "name": "GGUF/llama.cpp",
+        "status": "project-validated",
+        "scope": "17 of 21 planned cells; four np=16 cells deferred",
+        "evidence": "docs/results/matrix-714/"
+      },
+      {
+        "name": "BF16/vLLM",
+        "status": "pending",
+        "scope": "environment, functionality, parser, vision, performance and stability validation",
+        "evidence": null
+      }
+    ]
+  },
+  "hardware_matrix": [
+    {
+      "hardware": "Ryzen AI MAX+ PRO 395 / Radeon 8060S",
+      "gpu_arch": "gfx1151",
+      "status": "validated"
+    },
+    {
+      "hardware": "Radeon W7900",
+      "gpu_arch": "gfx1100",
+      "status": "planned"
+    },
+    {
+      "hardware": "Other RDNA3 / future RDNA4",
+      "gpu_arch": "various",
+      "status": "planned"
+    },
+    {
+      "hardware": "MI300X / MI355X",
+      "gpu_arch": "CDNA",
+      "status": "upstream-recipe"
+    }
+  ]
+}

@@ -21,8 +21,9 @@ of ROCm config recovers the missing memory. See
 ## 2. ROCm tracks
 
 The published benchmark is historical evidence from **ROCm 7.2.1**. ROCm
-**7.14.0** is the forward official gfx1151 validation target, kept as a separate
-track so new results cannot overwrite the reference matrix. See
+**7.14.0** provides AMD's official gfx1151 distribution; this repository keeps
+its scoped GGUF/llama.cpp validation separate so new evidence cannot overwrite
+the reference matrix. See
 [`docs/results/README.md`](results/README.md) for the status and evidence
 boundary.
 
@@ -66,39 +67,66 @@ Once that is green, continue with the vLLM build (`scripts/01-build-vllm.sh`).
 
 ## Alternative: ROCm 7.14.0
 
-**7.14.0** (released 2026-07-16; first ROCm with official gfx1151 APU support)
-ships via **TheRock**, not the legacy `repo.radeon.com/rocm/apt/` repo (which
-tops out at 7.2.4, so `apt` won't find 7.13/7.14). Install the official stable
-tarball **side-by-side** (non-destructive — leaves the 7.2.1 stack intact):
+ROCm 7.14.0 was published on **2026-07-15** and provides an official AMD gfx1151
+distribution. AMD's release notes list several gfx1151 Ryzen AI MAX PRO SKUs,
+but not the exact Ryzen AI MAX+ PRO 395 used here. The repository's 395 result
+is independent project validation, not an AMD SKU-support claim.
+
+Install the recorded tarball side-by-side. The commands verify size and SHA256,
+retry transient HTTP failures, refuse to overlay an existing prefix, and stage
+extraction before the final rename:
 
 ```bash
-# 1.60 GiB, built 2026-07-15. The per-family tarball/ path 403s on GET — use tarball-multi-arch/
-curl -fL -o rocm714.tar.gz \
-  https://repo.amd.com/rocm/tarball-multi-arch/therock-dist-linux-gfx1151-7.14.0.tar.gz
-mkdir -p ~/rocm-7.14.0 && tar xf rocm714.tar.gz -C ~/rocm-7.14.0   # relocatable ($ORIGIN RPATH, no /opt/rocm leak)
-export PATH="$HOME/rocm-7.14.0/bin:$PATH"
-export LD_LIBRARY_PATH="$HOME/rocm-7.14.0/lib:${LD_LIBRARY_PATH:-}"
-~/rocm-7.14.0/bin/hipcc --version   # HIP 7.14.x
+ROCM714_PREFIX="${ROCM714_PREFIX:-$HOME/rocm-7.14.0}"
+ROCM714_ARCHIVE="${TMPDIR:-/tmp}/therock-dist-linux-gfx1151-7.14.0.tar.gz"
+ROCM714_URL="https://repo.amd.com/rocm/tarball-multi-arch/therock-dist-linux-gfx1151-7.14.0.tar.gz"
+ROCM714_SHA256="2567d5e34e470db104a62a02c36aa770cb0430175e48c1c46df0eefc05e1d77c"
+ROCM714_SIZE=1713449440
+
+if [[ -e "$ROCM714_PREFIX" ]]; then
+  echo "Refusing to overlay existing prefix: $ROCM714_PREFIX" >&2
+  exit 1
+fi
+
+curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 \
+  --output "$ROCM714_ARCHIVE" "$ROCM714_URL"
+test "$(stat -c %s "$ROCM714_ARCHIVE")" -eq "$ROCM714_SIZE"
+printf '%s  %s\n' "$ROCM714_SHA256" "$ROCM714_ARCHIVE" | sha256sum -c -
+
+ROCM714_PARENT="$(dirname "$ROCM714_PREFIX")"
+mkdir -p "$ROCM714_PARENT"
+ROCM714_STAGE="$(mktemp -d "$ROCM714_PARENT/.rocm-7.14.0.XXXXXX")"
+trap 'rm -rf -- "$ROCM714_STAGE"' EXIT
+tar -xf "$ROCM714_ARCHIVE" -C "$ROCM714_STAGE"
+test -x "$ROCM714_STAGE/bin/hipcc"
+mv "$ROCM714_STAGE" "$ROCM714_PREFIX"
+trap - EXIT
+
+export PATH="$ROCM714_PREFIX/bin:$PATH"
+export LD_LIBRARY_PATH="$ROCM714_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+hipcc --version
 ```
 
-**Validation status (2026-08-13):** the **GGUF/llama.cpp track is validated**.
-The full benchmark matrix re-run against 7.14.0 (17 cells, c=16 deferred) shows
-**7.14.0 ≈ 7.2.1 on per-token decode** (TPOT c=1 −0.4%, c=4 −1.7%), **−2.8%
-VmPeak** on every cell, identical DFlash acceptance, and **zero `dmesg`/amdgpu
-errors in 6 h** sustained. Result + protocol:
-[`docs/results/rocm-7.14/README.md`](results/rocm-7.14/README.md); raw cells:
-[`docs/results/matrix-714/`](results/matrix-714/). Key comparison caveat: at
-`temp=1.0` aggregate `tok/s` is length-confounded across ROCm versions — use
-TPOT ([METHODOLOGY §12](results/METHODOLOGY.md)).
+The archive identity and observed HIP/LLVM versions are authoritative in
+[`configs/rocm-7.14-gguf-validation.json`](../configs/rocm-7.14-gguf-validation.json).
 
-The **vLLM/BF16 track (Phase 4) remains pending** — it needs a matching 7.14
-Python/TheRock stack built without disturbing the 7.2.1 one; the adaptation
-hypotheses (BF16, `TRITON_ATTN`, source-built vLLM, AITER off) must be
-revalidated as a complete stack, not assumed to transfer on a wheel-pin change.
+**Validation status (2026-08-13):** the reduced **GGUF/llama.cpp track is
+project-validated for 17 of 21 planned cells**; all four `np=16` cells were
+deferred. Mean TPOT deltas were −0.4% at `np=1` and −1.7% at `np=4`. All 17
+cells recorded a lower VmPeak mapped-address-space envelope (mean −2.8%).
+DFlash acceptance rates were similar. The operator observed no incident during
+the six-hour run, but raw system logs were not retained, so the run is not a
+standalone stability qualification. See the [scoped result and
+protocol](results/rocm-7.14/README.md) and [per-cell summary
+evidence](results/matrix-714/).
 
-Caveat: official support ≠ bug-free; open Strix Halo unified-memory issues
-([#6370](https://github.com/ROCm/ROCm/issues/6370), [#6165](https://github.com/ROCm/ROCm/issues/6165))
-persist — they did **not** manifest in the 6 h GGUF run, but remain a risk under
-heavier sustained load.
+The **vLLM/BF16 track remains pending**. BF16, `TRITON_ATTN`, parser, vision,
+long-context and stability behavior must be validated as a complete ROCm 7.14
+stack rather than inferred from the GGUF track.
+
+Open Strix Halo unified-memory issues
+([#6370](https://github.com/ROCm/ROCm/issues/6370),
+[#6165](https://github.com/ROCm/ROCm/issues/6165)) remain relevant to future
+stress validation.
 
 [uma]: https://github.com/ROCm/ROCm/issues/5444

@@ -13,13 +13,14 @@ This project distinguishes reproducible evidence from “it worked once.”
 
 Current status:
 
+<!-- BEGIN GENERATED: hardware-matrix -->
 | Platform | Status |
 |---|---|
-| Ryzen AI MAX+ PRO 395 / Radeon 8060S (`gfx1151`) | ✅ Validated |
-| Radeon W7900 (`gfx1100`) | 🚧 Planned |
-| Other RDNA3 Radeon | 🚧 Planned |
-| RDNA4 Radeon | 🚧 Planned |
-| MI300X / MI355X | 📘 Upstream recipe |
+| Ryzen AI MAX+ PRO 395 / Radeon 8060S (`gfx1151`) | ✅ **Validated** |
+| Radeon W7900 (`gfx1100`) | 🚧 **Planned** |
+| Other RDNA3 / future RDNA4 (`various`) | 🚧 **Planned** |
+| MI300X / MI355X (`CDNA`) | 📘 **Upstream recipe** |
+<!-- END GENERATED: hardware-matrix -->
 
 ## Submission requirements
 
@@ -74,9 +75,11 @@ hardware-validation/<gpu>-<rocm>-<date>/
   notes.md
 ```
 
-`manifest.json` should repeat the required fields in machine-readable form.
-Secrets, tokens, hostnames and unrelated system information must be removed
-before submission.
+`manifest.json` should follow
+[`schemas/hardware-validation.schema.json`](../schemas/hardware-validation.schema.json)
+and repeat the required evidence fields in machine-readable form. Secrets,
+tokens, hostnames and unrelated system information must be removed before
+submission.
 
 A maintainer may request a rerun when the workload, source revision, artifact
 identity or measurement method cannot be audited.

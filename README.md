@@ -11,8 +11,10 @@ repository records the engineering delta required for RDNA, validates it on real
 hardware, preserves raw results and failures, and makes the same protocol
 available to Radeon contributors.
 
+<!-- BEGIN GENERATED: validated-platform -->
 **Actually validated here:** AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S,
 `gfx1151` (RDNA 3.5). Radeon dGPUs are planned, not claimed as validated.
+<!-- END GENERATED: validated-platform -->
 
 The working method is:
 
@@ -87,9 +89,10 @@ This is an original concurrency study, not a Meta-aligned comparison anchor.
 ### Study 3 — original multimodal validation
 
 Five vision cells loaded the fixed test image through
-`mmproj-kquant.gguf`, produced image-grounded responses, and captured
-throughput/latency/mapped-memory deltas. These results validate only the
-recorded `gfx1151` stack.
+`mmproj-kquant.gguf`, completed image-conditioned generation, and captured
+throughput/latency/mapped-memory deltas. The raw cells do not retain response
+text, so this is functional-path evidence rather than a vision-quality study.
+These results apply only to the recorded `gfx1151` stack.
 
 Full definitions, raw JSON, variance and negative cells:
 
@@ -120,7 +123,7 @@ validated workaround, or historical workaround.
 
 ## Reproducibility contract
 
-Two machine-readable files define the reference:
+Three machine-readable files define the reference and public claim boundary:
 
 - [`configs/validated-stack.json`](configs/validated-stack.json) pins hardware
   evidence, host/runtime layers, Python, PyTorch, vLLM, llama.cpp, model
@@ -128,6 +131,11 @@ Two machine-readable files define the reference:
 - [`configs/artifact-manifest.json`](configs/artifact-manifest.json) records
   exact byte sizes and SHA256 hashes for the BF16 weights/configuration and all
   GGUF, DFlash and projector files used by the published results.
+- [`configs/public-claims.json`](configs/public-claims.json) controls the
+  validated/planned hardware and ROCm-track status rendered above.
+
+Versioned [JSON Schemas](schemas/) and
+`scripts/check_claim_consistency.py` make these boundaries auditable in CI.
 
 The defaults are the **validated reference**. Overrides are explicit and
 reported as **latest/experimental**:
@@ -146,13 +154,14 @@ checked against the committed manifest.
 
 ## Hardware validation matrix
 
+<!-- BEGIN GENERATED: hardware-matrix -->
 | Status | Platform | Evidence |
 |---|---|---|
 | ✅ **Validated** | Ryzen AI MAX+ PRO 395 / Radeon 8060S, `gfx1151` | Full recorded reference in this repository |
 | 🚧 **Planned** | Radeon W7900, `gfx1100` | No project evidence yet |
-| 🚧 **Planned** | Other RDNA3 Radeon | Requires a comparable community submission |
-| 🚧 **Planned** | RDNA4 Radeon | Requires a comparable community submission |
-| 📘 **Upstream recipe** | MI300X / MI355X, CDNA | vLLM recipes PR #776; not revalidated here |
+| 🚧 **Planned** | Other RDNA3 / future RDNA4, `various` | Requires a comparable community submission |
+| 📘 **Upstream recipe** | MI300X / MI355X, `CDNA` | Upstream evidence; not revalidated here |
+<!-- END GENERATED: hardware-matrix -->
 
 `🧪 Community validated` is reserved for a submission that includes the
 required manifest, command, logs and results. See
@@ -198,15 +207,19 @@ cgroup accounting.
 
 ## ROCm validation tracks
 
+<!-- BEGIN GENERATED: validation-tracks -->
 - **Validated historical/reference stack:** ROCm 7.2.1 host toolchain plus the
   recorded TheRock runtime. Existing benchmark JSON is immutable evidence.
-- **Current official gfx1151 track:** ROCm 7.14. The **GGUF/llama.cpp matrix is
-  validated** (2026-08-13): 7.14.0 matches 7.2.1 on per-token decode throughput
-  (TPOT c=1 −0.4%, c=4 −1.7%), with a consistent −2.8% VmPeak, identical DFlash
-  acceptance, and zero stability incidents in 6 h. The vLLM/BF16 track remains
-  pending. No 7.2.1 result is relabeled or overwritten.
+- **ROCm 7.14 gfx1151 track:** the reduced **GGUF/llama.cpp matrix is
+  project-validated** on Ryzen AI MAX+ PRO 395 / Radeon 8060S,
+  17 of 21 planned cells; the four
+  `np=16` cells were intentionally deferred). The vLLM/BF16 track remains
+  pending, so ROCm 7.14 is not presented as a globally validated replacement
+  for the historical stack. No ROCm 7.2.1 result is relabeled or overwritten.
+<!-- END GENERATED: validation-tracks -->
 
-See [ROCm 7.14 validation](docs/results/rocm-7.14/README.md).
+See [ROCm 7.14 scoped validation](docs/results/rocm-7.14/README.md) and its
+[machine-readable manifest](configs/rocm-7.14-gguf-validation.json).
 
 ## Requirements and operating notes
 

@@ -17,10 +17,12 @@
 | 16 | 40.8 | 102.0 | 2.5× |
 
 Both engines run on the **GPU (HIP/gfx1151)**. **llama.cpp Q4 is faster at every
-concurrency** because 4-bit weights move ~4× less memory per decoded token, and
-single-stream / batched decode on this APU is **memory-bandwidth-bound** (the
-~215 GB/s unified fabric is the ceiling for both). vLLM pays BF16's 2-byte/param
-traffic; llama.cpp pays ~0.5-byte/param.
+recorded concurrency**. One plausible mechanism is lower weight traffic:
+BF16 uses 2 bytes/parameter while the quantized path is approximately
+0.5 byte/parameter. The scaling is **consistent with a memory-bandwidth-bound
+decode regime**, but this run did not collect memory-controller counters or a
+kernel profile, so it does not establish bandwidth saturation as the isolated
+cause.
 
 **Reading the numbers**
 
@@ -33,10 +35,11 @@ traffic; llama.cpp pays ~0.5-byte/param.
   reaches the 102 tok/s above. This tuning difference is itself part of the
   contrast — vLLM's scheduler is the better out-of-box concurrent server.
 
-### Inference quality (both correct)
+### Functional correctness smoke tests
 
-Muse-Glimmer is a reasoning model (chain-of-thought in a `reasoning` channel,
-then the answer in `content`). Both engines surface this and answer correctly:
+Muse-Glimmer is a reasoning model (reasoning in a `reasoning` channel, then
+the answer in `content`). The recorded examples exercise reasoning output,
+arithmetic, and vLLM tool parsing:
 
 | Prompt | vLLM (BF16) | llama.cpp (Q4 kquant) |
 |---|---|---|
@@ -44,9 +47,9 @@ then the answer in `content`). Both engines surface this and answer correctly:
 | "What is 17 × 24? Just the number." | (BF16 reference) | `408` ✓ |
 | "Use the get_weather tool for Tokyo." | ATEM tool-call parses → `tool_calls` (`tests/test_parsers.py`) | n/a (no native tool parser) |
 
-The Q4 kquant stays coherent and numerically correct on these checks — Meta's
-calibrated quant is high quality (the model README reports "minimum to no
-degradation on agentic tasks" for the K-quant).
+The observed Q4 responses were coherent and the arithmetic smoke case was
+correct. These examples are functional smoke evidence, not a general model-
+quality or quantization-quality evaluation.
 
 ### Feature matrix
 
@@ -67,7 +70,7 @@ degradation on agentic tasks" for the K-quant).
 
 - **vLLM** — the full-feature path: native reasoning + tool-call parsing, vision,
   128K context, automatic concurrency. Use when you need the agentic/multimodal
-  features or a production-grade concurrent server, and can afford the BF16
+  features or a full-featured continuous-batching server, and can afford the BF16
   precision + the source build.
 - **llama.cpp** — the fast, light path: ~3.5× smaller weights, ~2.5× faster
   decode, ~1 s startup, trivial install. Use for interactive text chat, when the
@@ -157,12 +160,13 @@ process with its exact flags recorded in the cell JSON.
   accepted** — acceptance rate **0.0018 (0.18 %)**, ~1/37× the baseline
   aggregate rate.
 
-**Verified root cause:** at `-np 16` the drafter fires for all 16 slots
+**Evidence-supported proximate mechanism:** at `-np 16` the drafter fires for all 16 slots
 simultaneously, generating an enormous draft volume (millions of tokens) that is
 almost entirely rejected (>99.8 % in the dynamic run), while the full
-generate+verify compute for all those rejected drafts is paid in full. The draft
-model's predictions diverge badly from the target under batched concurrent load,
-so spec-decode goes into reverse — it costs more than it saves.
+generate+verify compute for all those rejected drafts is paid in full. The
+recorded acceptance collapse explains the observed reverse speedup. The matrix
+does not isolate whether the deeper cause is drafter behavior, scheduling,
+kernel behavior, or their interaction.
 
 **c=16 itself is fine** (baseline 17gb 34.5 tok/s, dynamic 31.0 tok/s — see
 Study 2 below). The pathology is DFlash-specific. Both c=16 DFlash cells are
@@ -173,7 +177,7 @@ missing data, they are *findings*.
 
 | Use case | Config | Expected |
 |---|---|---|
-| Single-stream interactive chat (c=1) | DFlash ON, `--spec-draft-n-max 16` | **~2.2× faster**, identical output (greedy), ~+3 GiB VmPeak |
+| Single-stream interactive chat (c=1) | DFlash ON, `--spec-draft-n-max 16` | **~2.2× faster** in Study 1; recorded arithmetic smoke matched; ~+3 GiB VmPeak |
 | Light concurrent (c ≤ 4) | DFlash ON | ~1.3–1.75×, mind the +3 GiB drafter footprint |
 | **High throughput (c ≥ 8, esp c=16)** | **DFlash OFF (baseline)** | c16 ~31–34 tok/s; **DFlash here is pathological** |
 
@@ -270,8 +274,8 @@ compare the speedup ratios here to Meta's table.
 ## Study 3 — Vision axis (temp 1.0, `--mmproj`, test image)
 
 `--mmproj models/mmproj-kquant.gguf` + the fixed `scripts/prompt-sets/test-image.png`,
-same sampling as Study 2, **3 reps**. Confirms the multimodal path loads +
-answers, and measures its memory delta vs text-only.
+same sampling as Study 2, **3 reps**. Exercises multimodal loading and
+generation, and measures its memory delta vs text-only.
 
 | weight | np | mode | agg tok/s | TTFT p90 (s) | TPOT med (s) | VRAM (MiB) | VmPeak (GiB) | acceptance |
 |---|---|---|---|---|---|---|---|---|
@@ -283,9 +287,10 @@ answers, and measures its memory delta vs text-only.
 
 **Reading the table:**
 
-- **Vision loads + answers via `--mmproj`.** All five cells produce coherent
-  image-grounded answers (the same generate path as text, with the projected
-  image patch tokens prepended).
+- **Vision loads and generates via `--mmproj`.** All five cells completed
+  image-conditioned generation (the same generate path as text, with projected
+  image patch tokens prepended). The cell JSON does not preserve answer text,
+  so this is functional path evidence rather than a vision-quality evaluation.
 - **mmproj adds ~+2–3 GiB VmPeak** vs the text-only cell at the same weight/np
   (Study 2 17gb c=1 text-only VmPeak 24.41 → Study 3 17gb c=1 vision 26.24;
   dynamic c=1 27.16 → 29.03). Cross-checks Meta's published ~+2 GB vision delta.
@@ -346,8 +351,8 @@ no slot scheduler).
 
 `llama-bench` uses `n_batch=2048`, `n_ubatch=512`, 16 threads, type_k/v=f16 — a
 slightly different code path from `llama-server -np 1`, so a ~2-3 % delta is
-expected and confirms the c=1 baseline decode rate is genuine (not a server/slot
-artifact). Reproduce with:
+expected and supports the c=1 baseline decode rate as not merely a server/slot
+artifact. Reproduce with:
 
 ```bash
 B=third_party/llama.cpp/build/bin
@@ -358,35 +363,35 @@ done
 
 ---
 
-## Part 2b — ROCm 7.2.1 (community) vs 7.14.0 (first official gfx1151)
+## Part 2b — recorded ROCm 7.2.1 stack vs ROCm 7.14.0 gfx1151 distribution
 
-The same matrix re-run against official stable ROCm 7.14.0, side-by-side (7.2.1
-left intact). Same llama.cpp `0b1bad1`, flags, weights, prompt set, seeds —
-**only ROCm differs**. 17 cells (c=16 deferred to limit sustained-load freeze
-risk). Full result, tables, and the checklist:
-[`rocm-7.14/README.md`](rocm-7.14/README.md). Per-cell comparison:
-[`matrix-714/comparison.md`](matrix-714/comparison.md).
+The reduced matrix was run side-by-side with the historical 7.2.1 evidence left
+intact. Recorded invariants include llama.cpp `0b1bad1`, flags, model artifacts,
+prompt set and seeds; the intended experimental variable is the ROCm runtime.
+The 7.14 arm contains 17 of 21 planned cells, with all four `np=16` cells
+deferred. See the [scoped result](rocm-7.14/README.md), [machine-readable
+manifest](../../configs/rocm-7.14-gguf-validation.json), and [per-cell
+comparison](matrix-714/comparison.md).
 
-**Result: 7.14.0 ≈ 7.2.1 on per-token decode throughput.**
-
-| Metric | 7.14 vs 7.2.1 |
+| Observed metric | 7.14 vs 7.2.1 |
 |---|---|
-| TPOT c=1 (clean throughput) | **−0.4%** (identical) |
-| TPOT c=4 (clean throughput) | **−1.7%** (marginally faster, within noise) |
-| Greedy DFlash decode (Study 1) | **−6%** per-token (small real win on the verify path) |
-| Memory (VmPeak) | **−2.8% mean, every cell** |
-| DFlash acceptance | **identical** (Δ ≤ 1.2 pp) |
-| Stability | **0 dmesg/amdgpu errors in 6 h** (no #6370/#6165) |
+| TPOT `np=1` (11 cells) | mean **−0.4%**, range −6.4%…+9.0% |
+| TPOT `np=4` (6 cells) | mean **−1.7%**, range −5.4%…+0.2% |
+| Greedy Study 1 DFlash TPOT | **−5.8% / −6.4%**; independent repeats are needed before attributing a runtime improvement |
+| VmPeak mapped-address-space envelope | **−2.8% mean; lower in all 17 cells** |
+| DFlash acceptance | similar; largest observed difference **1.21 percentage points** |
+| Run observation | operator observed no incident in six hours; raw system logs were not retained |
 
-> **⚠ Do not read the aggregate-tok/s column across versions.** At `temp=1.0`
-> (Study 2/3), cross-ROCm numerical differences cause sampling divergence, so
-> the version emitting longer sequences scores higher `agg tok/s` without
-> decoding faster — the raw table shows a spurious **+40.6%** on one c=4 cell
-> that is really a 1.36× token-count artifact (per-token cost was −1.6%).
-> **TPOT is the cross-version throughput metric.** See
-> [METHODOLOGY.md §12](METHODOLOGY.md#12-cross-rocm-comparison-721-vs-7140--why-tpot-not-aggregate-toks).
+> **⚠ Aggregate tok/s is not the primary cross-version metric for sampled
+> cells.** At `temp=1.0` (Study 2/3), output-length differences can change
+> `Σtokens ÷ wall` without a corresponding per-token latency change. The largest
+> example is +40.6% aggregate tok/s for one `np=4` cell alongside 1.36× as many
+> generated tokens and −1.6% TPOT. TPOT is less length-confounded; it is not a
+> profiler-backed proof of the causal kernel mechanism. See [METHODOLOGY.md
+> §12](METHODOLOGY.md#12-cross-rocm-comparison-721-vs-7140--why-tpot-not-aggregate-toks).
 
-**Bottom line:** the first *official* gfx1151 ROCm brings **official support +
-stability + a small memory reduction**, not a decode speedup — single-stream
-decode on this APU is bandwidth-bound, and a bandwidth-bound kernel cannot speed
-up by changing ROCm.
+**Interpretation:** the observed means do not establish a general decode
+speedup. The lower VmPeak values describe virtual mapped-address-space envelopes,
+not resident physical-memory savings. The run also does not establish AMD
+support for the exact Ryzen AI MAX+ PRO 395 SKU or standalone stability; those
+claims require different evidence.
