@@ -66,19 +66,39 @@ Once that is green, continue with the vLLM build (`scripts/01-build-vllm.sh`).
 
 ## Alternative: ROCm 7.14.0
 
-If you want AMD's officially-supported ROCm for gfx1151, use **7.14.0** (released
-2026-07-16; first ROCm with official gfx1151 APU support). Note: 7.14.0 ships via
-**TheRock** (the new modular build system) — the legacy `repo.radeon.com/rocm/apt/`
-repo tops out at **7.2.4**, so `apt` will not find 7.13/7.14 there. Install via the
-TheRock release/prefix and re-point the torch wheel pin in `pyproject.toml` to the
-matching line. The adaptation hypotheses (BF16, `TRITON_ATTN`, source-built vLLM, AITER
-off) must be revalidated as a complete stack; do not assume only the wheel pin
-changes. Partial cells may exist, but the ROCm 7.14 track is incomplete and has
-no published conclusion. Follow
-[`docs/results/rocm-7.14/README.md`](results/rocm-7.14/README.md). Caveat:
-official support does not imply every workload is bug-free; open Strix Halo
-unified-memory issues
+**7.14.0** (released 2026-07-16; first ROCm with official gfx1151 APU support)
+ships via **TheRock**, not the legacy `repo.radeon.com/rocm/apt/` repo (which
+tops out at 7.2.4, so `apt` won't find 7.13/7.14). Install the official stable
+tarball **side-by-side** (non-destructive — leaves the 7.2.1 stack intact):
+
+```bash
+# 1.60 GiB, built 2026-07-15. The per-family tarball/ path 403s on GET — use tarball-multi-arch/
+curl -fL -o rocm714.tar.gz \
+  https://repo.amd.com/rocm/tarball-multi-arch/therock-dist-linux-gfx1151-7.14.0.tar.gz
+mkdir -p ~/rocm-7.14.0 && tar xf rocm714.tar.gz -C ~/rocm-7.14.0   # relocatable ($ORIGIN RPATH, no /opt/rocm leak)
+export PATH="$HOME/rocm-7.14.0/bin:$PATH"
+export LD_LIBRARY_PATH="$HOME/rocm-7.14.0/lib:${LD_LIBRARY_PATH:-}"
+~/rocm-7.14.0/bin/hipcc --version   # HIP 7.14.x
+```
+
+**Validation status (2026-08-13):** the **GGUF/llama.cpp track is validated**.
+The full benchmark matrix re-run against 7.14.0 (17 cells, c=16 deferred) shows
+**7.14.0 ≈ 7.2.1 on per-token decode** (TPOT c=1 −0.4%, c=4 −1.7%), **−2.8%
+VmPeak** on every cell, identical DFlash acceptance, and **zero `dmesg`/amdgpu
+errors in 6 h** sustained. Result + protocol:
+[`docs/results/rocm-7.14/README.md`](results/rocm-7.14/README.md); raw cells:
+[`docs/results/matrix-714/`](results/matrix-714/). Key comparison caveat: at
+`temp=1.0` aggregate `tok/s` is length-confounded across ROCm versions — use
+TPOT ([METHODOLOGY §12](results/METHODOLOGY.md)).
+
+The **vLLM/BF16 track (Phase 4) remains pending** — it needs a matching 7.14
+Python/TheRock stack built without disturbing the 7.2.1 one; the adaptation
+hypotheses (BF16, `TRITON_ATTN`, source-built vLLM, AITER off) must be
+revalidated as a complete stack, not assumed to transfer on a wheel-pin change.
+
+Caveat: official support ≠ bug-free; open Strix Halo unified-memory issues
 ([#6370](https://github.com/ROCm/ROCm/issues/6370), [#6165](https://github.com/ROCm/ROCm/issues/6165))
-persist and can affect stability under sustained load.
+persist — they did **not** manifest in the 6 h GGUF run, but remain a risk under
+heavier sustained load.
 
 [uma]: https://github.com/ROCm/ROCm/issues/5444
