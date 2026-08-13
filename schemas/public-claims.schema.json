@@ -38,11 +38,12 @@
             "required": ["name", "status", "scope", "evidence"],
             "properties": {
               "name": {"enum": ["GGUF/llama.cpp", "BF16/vLLM"]},
-              "status": {"enum": ["project-validated", "pending"]},
+              "status": {"enum": ["project-validated", "pending", "evaluated-not-pursued"]},
               "scope": {"type": "string", "minLength": 1},
               "evidence": {
                 "oneOf": [
                   {"const": "docs/results/matrix-714/"},
+                  {"const": "scripts/bench_rocblas_gemm.cpp"},
                   {"type": "null"}
                 ]
               }

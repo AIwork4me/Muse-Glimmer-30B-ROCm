@@ -16,7 +16,7 @@
   root directly, without `--strip-components`.
 - The operator observed no incident during the six-hour run, but raw
   dmesg/amdgpu logs were not retained. No standalone stability claim is made.
-- The vLLM/BF16 track remains pending.
+- The BF16/vLLM track was evaluated and not pursued (rocBLAS BF16-GEMM proxy: 7.14 ≈ 7.2.1 on gfx1151 compute; no UX benefit).
 - Authoritative identities and scope:
   `configs/rocm-7.14-gguf-validation.json`.
 
@@ -142,7 +142,7 @@ Implemented in the harness via an `EXCLUDE_NPS` filter (default empty = current 
 sets `EXCLUDE_NPS=16`.
 
 ## 6. Honest-reporting caveats (written into docs)
-- The comparison is scoped to llama.cpp/GGUF; vLLM/PyTorch remains pending.
+- The comparison is scoped to llama.cpp/GGUF; vLLM/PyTorch was evaluated and not pursued (no 7.14 compute gain).
 - ROCm 7.14.0 is an official AMD gfx1151 distribution, but the release notes do
   not list the exact 395 SKU used for this independent project validation.
 - Aggregate tok/s is length-confounded for sampled cells; TPOT is primary but

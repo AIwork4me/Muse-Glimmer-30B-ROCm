@@ -18,7 +18,7 @@
         "completed_cells": {"const": 17},
         "planned_cells": {"const": 21},
         "deferred_cells": {"type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-        "vllm_bf16_status": {"const": "pending"}
+        "vllm_bf16_status": {"const": "evaluated-not-pursued"}
       }
     },
     "platform": {

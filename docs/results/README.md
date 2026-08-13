@@ -17,7 +17,7 @@ non-completions. Both are results.
 ## ROCm 7.14 gfx1151 distribution — scoped project validation
 
 Status: **GGUF/llama.cpp reduced matrix project-validated (2026-08-13);
-vLLM/BF16 pending.** This is not a global ROCm 7.14 validation claim.
+BF16/vLLM evaluated and not pursued (no 7.14 compute gain).** This is not a global ROCm 7.14 validation claim.
 
 The 17-cell run used AMD's official gfx1151 ROCm 7.14.0 tarball on Ryzen AI
 MAX+ PRO 395 / Radeon 8060S. AMD's 7.14 release notes do not list this exact

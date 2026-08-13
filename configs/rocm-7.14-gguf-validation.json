@@ -12,7 +12,7 @@
       "study2/dynamic/baseline/np16",
       "study2/dynamic/dflash/np16"
     ],
-    "vllm_bf16_status": "pending"
+    "vllm_bf16_status": "evaluated-not-pursued"
   },
   "platform": {
     "hardware": "AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S",

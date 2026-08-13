@@ -90,10 +90,14 @@ def validation_tracks(claims: dict, forward_manifest: dict) -> str:
         f"  project-validated** on {platform['hardware'].removeprefix('AMD ')},\n"
         f"  {scope['completed_cells']} of {scope['planned_cells']} planned cells; "
         "the four\n"
-        "  `np=16` cells were intentionally deferred). The vLLM/BF16 track remains\n"
-        "  pending, so ROCm 7.14 is not presented as a globally validated replacement\n"
-        f"  for the historical stack. No ROCm {reference['rocm']} result is relabeled "
-        "or overwritten."
+        "  `np=16` cells were intentionally deferred. The BF16/vLLM track was "
+        "**evaluated and is\n"
+        "  not pursued** — a rocBLAS BF16-GEMM proxy showed no 7.14 compute gain "
+        "over 7.2.1,\n"
+        "  so vLLM/BF16 stays on the ROCm 7.2.1 reference. ROCm 7.14 is not presented "
+        "as a globally\n"
+        f"  validated replacement for the historical stack. No ROCm {reference['rocm']} "
+        "result is relabeled or overwritten."
     )
 
 
@@ -150,14 +154,14 @@ def check() -> None:
     require(tracks["GGUF/llama.cpp"]["status"] == "project-validated" and
             tracks["GGUF/llama.cpp"]["evidence"] == "docs/results/matrix-714/",
             "GGUF track must point to accepted scoped evidence")
-    require(tracks["BF16/vLLM"]["status"] == "pending" and
-            tracks["BF16/vLLM"]["evidence"] is None,
-            "ROCm 7.14 BF16/vLLM must remain pending")
+    require(tracks["BF16/vLLM"]["status"] == "evaluated-not-pursued" and
+            tracks["BF16/vLLM"]["evidence"] == "scripts/bench_rocblas_gemm.cpp",
+            "ROCm 7.14 BF16/vLLM must be recorded as evaluated-not-pursued with the GEMM proxy evidence")
 
     require(forward_manifest["status"] == "validated-scoped",
             "ROCm 7.14 manifest lost scoped-validation status")
-    require(forward_manifest["scope"]["vllm_bf16_status"] == "pending",
-            "ROCm 7.14 manifest must keep BF16/vLLM pending")
+    require(forward_manifest["scope"]["vllm_bf16_status"] == "evaluated-not-pursued",
+            "ROCm 7.14 manifest must record BF16/vLLM as evaluated-not-pursued")
     require(forward_manifest["platform"]["hardware"] == platform["hardware"] and
             forward_manifest["platform"]["gpu_arch"] == platform["gpu_arch"],
             "ROCm 7.14 platform disagrees with validated hardware identity")

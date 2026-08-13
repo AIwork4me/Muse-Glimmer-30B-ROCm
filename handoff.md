@@ -14,7 +14,7 @@ delta for Ryzen AI and Radeon.
 Only Ryzen AI MAX+ PRO 395 / Radeon 8060S (`gfx1151`) has project-validated
 evidence today. ROCm 7.2.1 remains the full historical reference stack. The
 ROCm 7.14 GGUF/llama.cpp track is project-validated within a reduced 17-cell
-scope; vLLM/BF16 and Radeon dGPU tracks remain pending.
+scope; the BF16/vLLM track was evaluated and not pursued (a rocBLAS BF16-GEMM proxy showed no 7.14 compute gain over 7.2.1), and the Radeon dGPU track remains pending.
 
 ## Sources of truth
 
