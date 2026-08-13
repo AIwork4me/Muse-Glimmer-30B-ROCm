@@ -4,7 +4,7 @@ This repository project-validated a reduced **GGUF/llama.cpp** matrix using
 AMD's official ROCm 7.14.0 gfx1151 tarball on Ryzen AI MAX+ PRO 395 / Radeon
 8060S. AMD's ROCm 7.14 release notes describe gfx1151 support but do not list
 this exact 395 SKU; this is project evidence, not an AMD SKU-support claim.
-The vLLM/BF16 track remains pending.
+The BF16/vLLM track was evaluated and is not pursued (rocBLAS BF16-GEMM proxy: no 7.14 compute gain over 7.2.1); vLLM/BF16 stays on the 7.2.1 reference.
 
 The historical ROCm 7.2.1 evidence remains in `../matrix/`. The 17 ROCm 7.14
 cells remain in `../matrix-714/`; all four `np=16` cells were intentionally
@@ -174,22 +174,39 @@ hipcc --version
   finish reasons and recorded temperature; stability evidence is operator-level.
 - [x] Every new cell carries `manifest.rocm_version = "7.14.0"`.
 
-## Phase 4 — BF16/vLLM validation
+## Phase 4 — BF16/vLLM: evaluated, **not pursued** (no 7.14 compute benefit)
 
-Separate from the GGUF matrix; remains pending until a matching 7.14/TheRock
-Python stack is installed without disturbing the historical one.
+Phase 4 (rebuild vLLM/BF16 against 7.14) was **decided against** after a minimal
+predictive test showed 7.14 brings no BF16-compute gain, so it would not improve
+the user's vLLM experience. Rationale:
 
-- [ ] Python/runtime environment captured.
-- [ ] BF16 artifacts hash-verified.
-- [ ] vLLM source commit and patches recorded.
-- [ ] Model initialization completes.
-- [ ] `TRITON_ATTN` serve path completes text and vision requests.
-- [ ] Reasoning and ATEM tool-call parsers validated.
-- [ ] TTFT, TPOT and aggregate throughput captured.
-- [ ] Memory methodology includes VmPeak, RSS/HWM and stronger counters where available.
-- [ ] Long-context sanity test completed with the exact tested length recorded.
-- [ ] Sustained stability window and request count recorded.
-- [ ] DFlash status reported separately; no inference from llama.cpp to vLLM.
+- vLLM BF16 at **c=1 is bandwidth-bound** (4.2 tok/s ≈ the 56 GB-BF16/token
+  bandwidth ceiling) — unchanged by ROCm version.
+- vLLM BF16 at **c≥4 is GEMM(compute)-bound**, so we measured rocBLAS BF16-GEMM
+  throughput on both ROCm versions (`scripts/bench_rocblas_gemm.cpp`, exercising
+  the actual gfx1151 GEMM kernels each `librocblas` ships):
+
+| GEMM (bf16) | ROCm 7.2.1 | ROCm 7.14.0 | Δ |
+|---|---|---|---|
+| 4096³ | 3.5 TFLOPS | 3.9 TFLOPS | +11% |
+| 8192×8192×4096 | 3.6 TFLOPS | 3.6 TFLOPS | 0% |
+| 12288³ | 3.1 TFLOPS | 2.9 TFLOPS | −6% |
+| **mean** | **3.4** | **3.5** | **≈ +2% (noise)** |
+
+**No systematic BF16-compute improvement** — both versions sit at the same RDNA 3.5
+gfx1151 compute ceiling (~3–4 BF16 TFLOPS). A ~1–2 h vLLM rebuild would yield zero
+user-perceivable speedup, so — per the UX-first principle — Phase 4 is **not
+pursued** and is **not surfaced as a recommended path**. vLLM/BF16 stays on the
+validated 7.2.1 reference; speed-focused users use the Q4/llama.cpp path.
+
+Reproduce the proxy:
+
+```bash
+for V in /opt/rocm-7.2.1 "$HOME/rocm-7.14.0"; do
+  PATH="$V/bin:$PATH" hipcc scripts/bench_rocblas_gemm.cpp -I"$V/include" -L"$V/lib" -lrocblas -O3 -o /tmp/gemm
+  LD_LIBRARY_PATH="$V/lib" /tmp/gemm
+done
+```
 
 ## Publication gate
 
@@ -204,4 +221,4 @@ only when:
 - the ROCm 7.2.1 history remains unchanged: ✓
 
 **GGUF/llama.cpp status: project-validated within the recorded 17-cell scope.**
-The vLLM/BF16 track and all four `np=16` cells remain pending/deferred.
+The BF16/vLLM track was evaluated and is not pursued (no 7.14 compute gain); the four `np=16` cells remain deferred.

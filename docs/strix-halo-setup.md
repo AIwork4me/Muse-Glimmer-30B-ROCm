@@ -120,9 +120,10 @@ standalone stability qualification. See the [scoped result and
 protocol](results/rocm-7.14/README.md) and [per-cell summary
 evidence](results/matrix-714/).
 
-The **vLLM/BF16 track remains pending**. BF16, `TRITON_ATTN`, parser, vision,
-long-context and stability behavior must be validated as a complete ROCm 7.14
-stack rather than inferred from the GGUF track.
+The **BF16/vLLM track was evaluated and is not pursued**: a rocBLAS BF16-GEMM
+proxy showed no 7.14 compute gain over 7.2.1, so a vLLM/7.14 rebuild would not
+improve UX (c=1 is bandwidth-bound; c≥4 GEMM is unchanged). vLLM/BF16 stays on
+the validated 7.2.1 reference — do not infer the GGUF result to the vLLM stack.
 
 Open Strix Halo unified-memory issues
 ([#6370](https://github.com/ROCm/ROCm/issues/6370),

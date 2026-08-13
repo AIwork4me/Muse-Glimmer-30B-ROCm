@@ -213,9 +213,10 @@ cgroup accounting.
 - **ROCm 7.14 gfx1151 track:** the reduced **GGUF/llama.cpp matrix is
   project-validated** on Ryzen AI MAX+ PRO 395 / Radeon 8060S,
   17 of 21 planned cells; the four
-  `np=16` cells were intentionally deferred). The vLLM/BF16 track remains
-  pending, so ROCm 7.14 is not presented as a globally validated replacement
-  for the historical stack. No ROCm 7.2.1 result is relabeled or overwritten.
+  `np=16` cells were intentionally deferred. The BF16/vLLM track was **evaluated and is
+  not pursued** — a rocBLAS BF16-GEMM proxy showed no 7.14 compute gain over 7.2.1,
+  so vLLM/BF16 stays on the ROCm 7.2.1 reference. ROCm 7.14 is not presented as a globally
+  validated replacement for the historical stack. No ROCm 7.2.1 result is relabeled or overwritten.
 <!-- END GENERATED: validation-tracks -->
 
 See [ROCm 7.14 scoped validation](docs/results/rocm-7.14/README.md) and its

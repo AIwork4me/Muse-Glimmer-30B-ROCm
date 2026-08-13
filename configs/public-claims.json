@@ -25,9 +25,9 @@
       },
       {
         "name": "BF16/vLLM",
-        "status": "pending",
-        "scope": "environment, functionality, parser, vision, performance and stability validation",
-        "evidence": null
+        "status": "evaluated-not-pursued",
+        "scope": "evaluated by rocBLAS BF16-GEMM proxy (7.14 == 7.2.1, no compute gain); not pursued - vLLM/BF16 stays on the 7.2.1 reference",
+        "evidence": "scripts/bench_rocblas_gemm.cpp"
       }
     ]
   },

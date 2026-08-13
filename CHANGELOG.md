@@ -34,5 +34,5 @@ release gates are complete.
 - Historical ROCm 7.2.1 benchmark cells, including negative and
   non-completing findings.
 - All committed ROCm 7.14 raw summary cells; the GGUF track is scoped to 17/21,
-  while vLLM/BF16 remains pending.
+  while BF16/vLLM was evaluated and not pursued (rocBLAS BF16-GEMM proxy: no 7.14 compute gain over 7.2.1).
 - Radeon dGPU validation status as planned.
