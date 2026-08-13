@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -75,23 +76,47 @@ def hardware_doc_table(claims: dict) -> str:
     return "\n".join(rows)
 
 
-def validation_tracks(claims: dict) -> str:
+def validation_tracks(claims: dict, forward_manifest: dict) -> str:
     reference = claims["reference_evidence"]
     forward = claims["forward_validation"]
+    scope = forward_manifest["scope"]
+    platform = forward_manifest["platform"]
     return (
         f"- **Validated historical/reference stack:** ROCm {reference['rocm']} "
         "host toolchain plus the\n"
         "  recorded TheRock runtime. Existing benchmark JSON is immutable evidence.\n"
-        f"- **Forward gfx1151 validation track:** ROCm {forward['rocm']}. "
-        f"Status is **{forward['status']}**; no\n"
-        f"  ROCm {reference['rocm']} result is relabeled or overwritten."
+        f"- **ROCm {forward['rocm'][:4]} gfx1151 track:** the reduced "
+        "**GGUF/llama.cpp matrix is\n"
+        f"  project-validated** on {platform['hardware'].removeprefix('AMD ')},\n"
+        f"  {scope['completed_cells']} of {scope['planned_cells']} planned cells; "
+        "the four\n"
+        "  `np=16` cells were intentionally deferred). The vLLM/BF16 track remains\n"
+        "  pending, so ROCm 7.14 is not presented as a globally validated replacement\n"
+        f"  for the historical stack. No ROCm {reference['rocm']} result is relabeled "
+        "or overwritten."
     )
+
+
+def verify_checksums(directory: Path, checksum_file: Path) -> None:
+    expected = {}
+    for line in checksum_file.read_text(encoding="utf-8").splitlines():
+        digest, name = line.split("  ", 1)
+        require(Path(name).name == name, f"unsafe checksum path: {name}")
+        require(name not in expected, f"duplicate checksum entry: {name}")
+        expected[name] = digest
+    cells = sorted(directory.glob("cell-*.json"))
+    require(set(expected) == {cell.name for cell in cells},
+            "ROCm 7.14 checksum inventory disagrees with committed cells")
+    for cell in cells:
+        actual = hashlib.sha256(cell.read_bytes()).hexdigest()
+        require(actual == expected[cell.name], f"checksum mismatch: {cell.name}")
 
 
 def check() -> None:
     stack = load("configs/validated-stack.json")
     artifacts = load("configs/artifact-manifest.json")
     claims = load("configs/public-claims.json")
+    forward_manifest = load(claims["forward_validation"]["manifest"])
 
     require(claims["validated_stack"] == "configs/validated-stack.json",
             "public claims point to the wrong stack manifest")
@@ -114,10 +139,43 @@ def check() -> None:
             "historical evidence status disagrees with stack manifest")
 
     forward = claims["forward_validation"]
-    require(forward == {"rocm": "7.14", "status": "pending"},
-            "ROCm 7.14 must remain pending until accepted evidence changes it")
-    require(stack["benchmark_evidence"]["rocm_7_14_status"] == "pending",
-            "validated stack must keep ROCm 7.14 pending")
+    require(forward["rocm"] == "7.14.0" and
+            forward["status"] == "partially-validated",
+            "ROCm 7.14 must remain scoped rather than globally validated")
+    require(stack["benchmark_evidence"]["forward_validation_manifest"] ==
+            forward["manifest"],
+            "validated stack points to the wrong forward-validation manifest")
+    tracks = {track["name"]: track for track in forward["tracks"]}
+    require(len(tracks) == 2, "forward validation requires exactly two unique tracks")
+    require(tracks["GGUF/llama.cpp"]["status"] == "project-validated" and
+            tracks["GGUF/llama.cpp"]["evidence"] == "docs/results/matrix-714/",
+            "GGUF track must point to accepted scoped evidence")
+    require(tracks["BF16/vLLM"]["status"] == "pending" and
+            tracks["BF16/vLLM"]["evidence"] is None,
+            "ROCm 7.14 BF16/vLLM must remain pending")
+
+    require(forward_manifest["status"] == "validated-scoped",
+            "ROCm 7.14 manifest lost scoped-validation status")
+    require(forward_manifest["scope"]["vllm_bf16_status"] == "pending",
+            "ROCm 7.14 manifest must keep BF16/vLLM pending")
+    require(forward_manifest["platform"]["hardware"] == platform["hardware"] and
+            forward_manifest["platform"]["gpu_arch"] == platform["gpu_arch"],
+            "ROCm 7.14 platform disagrees with validated hardware identity")
+    require(forward_manifest["llama_cpp"]["commit"] == stack["llama_cpp"]["commit"],
+            "ROCm 7.14 llama.cpp commit disagrees with the reference stack")
+    gguf = artifacts["sets"]["gguf"]
+    require(forward_manifest["model"]["repository"] == gguf["repository"] and
+            forward_manifest["model"]["revision"] == gguf["revision"],
+            "ROCm 7.14 model identity disagrees with the artifact manifest")
+    matrix_714 = ROOT / forward_manifest["evidence"]["matrix"]
+    cells_714 = sorted(matrix_714.glob("cell-*.json"))
+    require(len(cells_714) == forward_manifest["scope"]["completed_cells"],
+            "ROCm 7.14 cell count disagrees with its validation scope")
+    for cell in cells_714:
+        require(json.loads(cell.read_text(encoding="utf-8"))["manifest"]
+                ["rocm_version"] == "7.14.0",
+                f"ROCm 7.14 cell is mislabeled: {cell.name}")
+    verify_checksums(matrix_714, ROOT / forward_manifest["evidence"]["checksums"])
 
     hardware = claims["hardware_matrix"]
     validated = [item for item in hardware if item["status"] == "validated"]
@@ -153,7 +211,7 @@ def check() -> None:
             readme_hardware_table(claims),
             "README hardware-matrix block is stale")
     require(generated_block(readme, "validation-tracks") ==
-            validation_tracks(claims),
+            validation_tracks(claims, forward_manifest),
             "README validation-tracks block is stale")
 
     hardware_doc = HARDWARE_DOC.read_text(encoding="utf-8")

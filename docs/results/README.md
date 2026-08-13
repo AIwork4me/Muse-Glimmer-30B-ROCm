@@ -14,18 +14,21 @@ replaces an older validated record.
 The raw matrix contains completed cells and two evidence-based pathological
 non-completions. Both are results.
 
-## Current official gfx1151 track — ROCm 7.14
+## ROCm 7.14 gfx1151 distribution — scoped project validation
 
-Status: **GGUF matrix validated (2026-08-13); vLLM/BF16 track pending.**
+Status: **GGUF/llama.cpp reduced matrix project-validated (2026-08-13);
+vLLM/BF16 pending.** This is not a global ROCm 7.14 validation claim.
 
-The 7.14 GGUF matrix (17 cells, c=16 deferred) ran against official stable
-ROCm 7.14.0 side-by-side with 7.2.1 — same llama.cpp `0b1bad1`, flags, weights,
-prompts, seeds; only ROCm differs. **Result: 7.14.0 ≈ 7.2.1 on per-token decode
-throughput (TPOT c=1 −0.4%, c=4 −1.7%), with a consistent −2.8% VmPeak and
-identical DFlash acceptance; zero stability incidents in 6 h.** Aggregate
-`tok/s` at `temp=1.0` is length-confounded (sampling divergence inflates it) —
-see the [result summary](rocm-7.14/README.md) and
-[METHODOLOGY.md §12](METHODOLOGY.md). Raw cells: [matrix-714/](matrix-714/).
+The 17-cell run used AMD's official gfx1151 ROCm 7.14.0 tarball on Ryzen AI
+MAX+ PRO 395 / Radeon 8060S. AMD's 7.14 release notes do not list this exact
+SKU, so the hardware result is project evidence rather than an AMD support
+claim. Mean TPOT deltas were −0.4% at `np=1` and −1.7% at `np=4`; all 17 cells
+had a lower VmPeak mapped-address-space envelope (mean −2.8%). DFlash acceptance
+rates were similar, with the largest observed difference 1.21 percentage
+points. No incident was observed during the six-hour run, but raw system logs
+were not retained, so this is not a standalone stability qualification.
+
+See the [result summary](rocm-7.14/README.md), [scoped manifest](../../configs/rocm-7.14-gguf-validation.json),
 
 Rules:
 

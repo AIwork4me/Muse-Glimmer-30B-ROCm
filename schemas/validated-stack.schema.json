@@ -76,11 +76,11 @@
     "benchmark_evidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rocm_7_2_1_matrix", "methodology", "rocm_7_14_status"],
+      "required": ["rocm_7_2_1_matrix", "methodology", "forward_validation_manifest"],
       "properties": {
         "rocm_7_2_1_matrix": {"const": "docs/results/matrix/"},
         "methodology": {"const": "docs/results/METHODOLOGY.md"},
-        "rocm_7_14_status": {"const": "pending"}
+        "forward_validation_manifest": {"const": "configs/rocm-7.14-gguf-validation.json"}
       }
     }
   },

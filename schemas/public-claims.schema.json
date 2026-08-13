@@ -23,10 +23,32 @@
     "forward_validation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rocm", "status"],
+      "required": ["rocm", "status", "manifest", "tracks"],
       "properties": {
-        "rocm": {"const": "7.14"},
-        "status": {"const": "pending"}
+        "rocm": {"const": "7.14.0"},
+        "status": {"const": "partially-validated"},
+        "manifest": {"const": "configs/rocm-7.14-gguf-validation.json"},
+        "tracks": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "status", "scope", "evidence"],
+            "properties": {
+              "name": {"enum": ["GGUF/llama.cpp", "BF16/vLLM"]},
+              "status": {"enum": ["project-validated", "pending"]},
+              "scope": {"type": "string", "minLength": 1},
+              "evidence": {
+                "oneOf": [
+                  {"const": "docs/results/matrix-714/"},
+                  {"type": "null"}
+                ]
+              }
+            }
+          }
+        }
       }
     },
     "hardware_matrix": {

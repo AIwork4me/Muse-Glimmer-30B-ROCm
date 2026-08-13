@@ -1,42 +1,56 @@
 # Plan — Part 2: ROCm 7.14.0 isolation comparison (7.2.1 vs 7.14.0)
 
 - **Date:** 2026-08-13
-- **Status:** Draft (awaiting go-ahead)
+- **Status:** Complete — scoped GGUF/llama.cpp validation (17/21 cells)
 - **Spec source of truth:** `docs/superpowers/specs/2026-08-12-llamacpp-dflash-benchmark-design.md` §9 (P-D)
-- **Baseline (immutable):** the 21-cell ROCm **7.2.1** matrix committed on `master` at `docs/results/matrix/`
-- **Controlled variable:** **ROCm version only.** Same llama.cpp source (`0b1bad1`), same flags, same weights, same prompt set, same seeds, same harness.
+- **Baseline (immutable):** the 21-cell ROCm **7.2.1** matrix at `docs/results/matrix/`
+- **Intended controlled variable:** ROCm runtime; recorded invariants are llama.cpp
+  commit, model artifacts, flags, prompts, seeds and harness.
+
+## Outcome and deviations from the draft
+
+- Evidence base: `97882c40347329b7d7b471bf1a586f7481e18494`; evidence
+  commit: `1677fb42d57c6c06c2004f6e99150b6037dc4db3`.
+- Completed 17 of 21 planned cells. All four `np=16` cells were deferred.
+- The archive came from `tarball-multi-arch/`; extraction used the archive
+  root directly, without `--strip-components`.
+- The operator observed no incident during the six-hour run, but raw
+  dmesg/amdgpu logs were not retained. No standalone stability claim is made.
+- The vLLM/BF16 track remains pending.
+- Authoritative identities and scope:
+  `configs/rocm-7.14-gguf-validation.json`.
 
 ---
 
 ## 0. Goal
 
-Produce an honest, cell-by-cell **ROCm 7.2.1 (apt) vs ROCm 7.14.0 (TheRock, official stable)** comparison on the
-llama.cpp path for Muse-Glimmer-30B on gfx1151 (Strix Halo), without ever endangering the proven 7.2.1 stack or its
-committed matrix. 7.14.0 is the first ROCm with **official** gfx1151 APU support (released 2026-07-16; adds Ryzen AI
-MAX+ PRO 495/490/485 = gfx1151). Output: a second immutable matrix under `docs/results/matrix-714/` + a comparison
-section in the docs.
+Produce a cell-by-cell comparison on the llama.cpp path while preserving the
+historical ROCm 7.2.1 matrix. ROCm 7.14.0 provides an official AMD gfx1151
+distribution; AMD's release notes do not list the exact Ryzen AI MAX+ PRO 395
+used here. Output is a separate, scoped evidence matrix and comparison.
 
 ## 1. Artifact (verified)
 
-Official **stable** ROCm 7.14.0, self-contained for gfx1151:
+Official ROCm 7.14.0 gfx1151 tarball, published 2026-07-15:
 
-```
-https://repo.amd.com/rocm/tarball/therock-dist-linux-gfx1151-7.14.0.tar.gz
-  size 1,713,449,440 B (1.60 GiB) · built 2026-07-15 · content-type binary/octet-stream
+```text
+https://repo.amd.com/rocm/tarball-multi-arch/therock-dist-linux-gfx1151-7.14.0.tar.gz
+size: 1,713,449,440 bytes
+sha256: 2567d5e34e470db104a62a02c36aa770cb0430175e48c1c46df0eefc05e1d77c
 ```
 
-Not a nightly alpha (the per-family *nightly* line is frozen at `7.14.0a20260612`; the stable 7.14.0 lives on the
-stable index). TheRock tarballs are relocatable ("just raw files", `/opt/rocm`-style layout), so no install step, no
-apt, no conflict with 7.2.1.
+The archive was extracted to a side-by-side prefix. The system ROCm 7.2.1
+installation remained intact.
 
 ## 2. Isolation principle (non-destructive + revertible)
 
-- 7.14.0 extracted to **`~/rocm-7.14.0`** (user-owned, no sudo; `rm -rf` to revert). `/opt/rocm`-7.2.1 apt install
-  untouched. (Alternative if convention preferred: `/opt/rocm-7.14.0` via sudo — functionally identical.)
+- 7.14.0 extracted to **`~/rocm-7.14.0`**; the system ROCm 7.2.1 install stayed
+  untouched.
 - llama.cpp rebuilt into **`third_party/llama.cpp/build-714/`**; the 7.2.1 `build/` left intact.
 - 7.14 matrix written to **`docs/results/matrix-714/`**; the 7.2.1 `docs/results/matrix/` cells stay byte-identical.
 - 7.14.0 selected at run time only via `PATH`/`LD_LIBRARY_PATH` env — nothing system-wide changes.
-- **Revert = `rm -rf ~/rocm-7.14.0 third_party/llama.cpp/build-714 docs/results/matrix-714`; unset env.**
+- Local runtime/build artifacts may be removed after target verification.
+  Committed evidence is changed only through reviewed Git history.
 
 ## 3. Steps
 
@@ -47,11 +61,9 @@ apt, no conflict with 7.2.1.
 - Confirm `third_party/llama.cpp` at `0b1bad1` (done).
 
 ### S1 — Install 7.14.0 to `~/rocm-7.14.0`
-```
-curl -fL -o /tmp/rocm714.tar.gz \
-  https://repo.amd.com/rocm/tarball/therock-dist-linux-gfx1151-7.14.0.tar.gz
-mkdir -p ~/rocm-7.14.0 && tar xf /tmp/rocm714.tar.gz -C ~/rocm-7.14.0 --strip-components=1
-```
+The executed run used the `tarball-multi-arch/` archive and extracted its root
+without `--strip-components`. The verified reproduction commands now live in
+[`docs/strix-halo-setup.md`](../../strix-halo-setup.md#alternative-rocm-7140).
 **Gate (must pass before S3):**
 - `~/rocm-7.14.0/bin/rocminfo | grep gfx1151` → lists gfx1151.
 - `~/rocm-7.14.0/bin/hipcc --version` → reports 7.14.0 (HIP version).
@@ -83,12 +95,12 @@ env PATH=$ROCM_PREFIX/bin:$PATH cmake --build third_party/llama.cpp/build-714 -j
 server boots on :8080 and answers `17 × 23 → 391` correctly.
 
 ### S4 — Re-run the matrix under 7.14.0 (Study 1/2/3)
-`bash scripts/run-gguf-matrix-714.sh all` → writes `docs/results/matrix-714/cell-*.json`, identical protocol to 7.2.1
-(same cells, configs, reps, warmup, seeds, randomized order), only ROCm differs.
+`bash scripts/run-gguf-matrix-714.sh all` wrote `docs/results/matrix-714/cell-*.json`.
+Recorded invariants include configs, repetitions, warmup, seeds and cell flags;
+the intended experimental variable was the ROCm runtime.
 
-**Scope (decision point — see §5):** run **19 of 21 cells** — all of Study 1 (4) + Study 3 (5) + Study 2's 10
-non-pathological cells. **Skip the 2 known-pathological `c=16 + DFlash` cells** (`study2-17gb-np16-df1`,
-`study2-dynamic-np16-df1`) and reference the existing 7.2.1 pathology evidence (METHODOLOGY §6) for those.
+**Actual scope:** 17 of 21 planned cells — Study 1 (4), Study 3 (5), and
+Study 2 at `np ∈ {1,4}` (8). All four `np=16` cells were deferred.
 
 **Stability watch (the APU risks — #6370 GTT billing, #6165 hard freeze under sustained load):**
 - Background `dmesg -wT` logger for the whole run; grep for `amdgpu`, `GTT`, `fault`, ring resets.
@@ -98,23 +110,22 @@ non-pathological cells. **Skip the 2 known-pathological `c=16 + DFlash` cells** 
 - The matrix driver already isolates failures per-cell (one crash can't cascade); each cell is an independent server.
 
 ### S5 — Cell-by-cell comparison (7.2.1 vs 7.14.0)
-New `scripts/compare_rocm.py` (or extend `render_matrix.py`) joining `matrix/` ↔ `matrix-714/` on
-`(study, weight, np, dflash, vision)`. Per cell: `agg_tok/s` (median, Δ%, min/max), TTFT p50/p90, TPOT, VmPeak,
-acceptance (DFlash cells). Render a markdown comparison table → `docs/results/matrix-714/comparison.md`.
+Implemented `scripts/compare_rocm.py`, joining on
+`(study, weight, np, dflash, vision)`. It reports one-sided cells, renders
+latency in milliseconds, leads with TPOT and retains aggregate tok/s with its
+length-confound warning.
 
 ### S6 — Document + commit
-- `docs/results/METHODOLOGY.md`: add the 7.14.0 manifest row + a "7.2.1 vs 7.14.0" subsection (methodology box:
-  identical source/flags/weights/seeds; only ROCm differs; official stable 7.14.0 gfx1151 tarball provenance).
-- `docs/results/benchmark.md`: new **7.2.1 vs 7.14.0** section with the comparison table + honest caveats.
-- `handoff.md` §8 + `README.md`: close out the 7.14.0 "pending Part 2" item with the result.
-- Commit `docs/results/matrix-714/` (cell JSONs + comparison) as immutable artifacts alongside the 7.2.1 matrix.
+- Committed the 17 per-cell summaries and derived comparison separately from
+  the historical matrix.
+- Documented scoped status, provenance, metric limitations and pending BF16 work.
 
 ## 4. Risks & mitigations
 
 | Risk | Mitigation |
 |---|---|
 | Hard freeze (#6165) under sustained c=16 load on newer ROCm | Skip known-pathological c=16+DFlash; watch dmesg/temp; abort-on-anomaly; per-cell isolation |
-| GTT billing gap (#6370) skewing memory | Trust VmPeak (METHODOLOGY §5) for both arms; record VmHWM/rocm-smi for transparency |
+| GTT billing gap (#6370) skewing memory | Treat VmPeak as a mapped-address-space envelope; retain VmHWM/rocm-smi for context |
 | Tarball not relocatable (hardcoded `/opt/rocm`) | S1 gate checks `readelf`/`ldd`; shim with `LD_LIBRARY_PATH`/`patchelf` if needed |
 | 7.14.0 userspace ↔ kernel 6.17 / amdgpu driver mismatch | S1 gate (`rocminfo` sees gfx1151, `rocm-smi` works); tarball is userspace-only, rides existing driver |
 | Accidental overwrite of 7.2.1 matrix | Separate `matrix-714/` out dir + env override + S0 local snapshot; never run 7.14 cells into `matrix/` |
@@ -131,8 +142,9 @@ Implemented in the harness via an `EXCLUDE_NPS` filter (default empty = current 
 sets `EXCLUDE_NPS=16`.
 
 ## 6. Honest-reporting caveats (written into docs)
-- Comparison is **ROCm 7.2.1 (apt, legacy) vs ROCm 7.14.0 (TheRock, official stable)** on the llama.cpp path; vLLM/torch
-  are out of scope (the spec targets llama.cpp).
-- 7.14.0 = first *official* gfx1151 ROCm; 7.2.1 was community-verified. "Official ≠ bug-free": open APU UMA issues
-  persist and may affect stability/numbers — any anomaly is reported, not hidden.
-- Absolute tok/s differences conflate ROCm version + compiler/runtime maturity; the cell-by-cell Δ is the finding.
+- The comparison is scoped to llama.cpp/GGUF; vLLM/PyTorch remains pending.
+- ROCm 7.14.0 is an official AMD gfx1151 distribution, but the release notes do
+  not list the exact 395 SKU used for this independent project validation.
+- Aggregate tok/s is length-confounded for sampled cells; TPOT is primary but
+  does not establish a causal kernel mechanism or an equivalence bound.
+- Raw response, server and system logs were not retained; stability evidence is

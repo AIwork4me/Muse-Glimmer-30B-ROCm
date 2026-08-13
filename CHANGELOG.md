@@ -2,7 +2,7 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 No release has been tagged yet; entries remain under **Unreleased** until the
-ROCm 7.14 validation track and release gates are complete.
+release gates are complete.
 
 ## Unreleased
 
@@ -10,6 +10,9 @@ ROCm 7.14 validation track and release gates are complete.
 
 - Machine-readable schemas for stack, artifact, public-claim, historical
   benchmark-cell, and community hardware-validation manifests.
+- A scoped ROCm 7.14 GGUF/llama.cpp validation manifest and SHA256 evidence
+  inventory, explicitly covering 17 of 21 planned cells.
+- Schema validation for both historical and ROCm 7.14 benchmark cells.
 - Automated public-claim consistency checks.
 - A lightweight hosted-CI dependency group and a separate TheRock/ROCm
   dependency-resolution smoke workflow.
@@ -23,9 +26,13 @@ ROCm 7.14 validation track and release gates are complete.
   evidence-supported mechanisms from uncollected profiling or quality evidence.
 - The maintainer handoff is now a durable source-of-truth map rather than a
   machine-local work-session snapshot.
+- Cross-ROCm comparison output now renders latency in the correct units, fails
+  closed on malformed/duplicate cells, and leads with TPOT rather than aggregate tok/s.
 
 ### Preserved
 
 - Historical ROCm 7.2.1 benchmark cells, including negative and
   non-completing findings.
-- ROCm 7.14 and Radeon validation status as pending.
+- All committed ROCm 7.14 raw summary cells; the GGUF track is scoped to 17/21,
+  while vLLM/BF16 remains pending.
+- Radeon dGPU validation status as planned.

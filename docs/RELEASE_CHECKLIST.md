@@ -7,8 +7,10 @@ or GitHub Release. Record the exact commit and commands used to close each gate.
 
 - [ ] Historical raw benchmark files are unchanged from their accepted commits.
 - [ ] Negative, aborted, and pathological results remain visible.
-- [ ] No partial or incomplete forward-validation data is included.
-- [ ] ROCm 7.14 remains pending unless a complete evidence set has passed review.
+- [ ] Every forward-validation bundle declares completed, deferred, failed and
+  pending scope; no partial artifact is presented as global validation.
+- [ ] ROCm 7.14 GGUF/vLLM status matches its scoped manifest and accepted
+  evidence; pending tracks have not been promoted by prose alone.
 - [ ] Hardware status matches accepted evidence; planned Radeon targets have not
   been promoted by prose alone.
 - [ ] Benchmark and performance wording has been reviewed against the raw record.
@@ -18,6 +20,8 @@ or GitHub Release. Record the exact commit and commands used to close each gate.
 
 - [ ] `configs/validated-stack.json` passes its schema and matches public claims.
 - [ ] `configs/artifact-manifest.json` passes its schema.
+- [ ] `configs/rocm-7.14-gguf-validation.json` passes its schema and its evidence
+  checksum inventory verifies.
 - [ ] Every published artifact size and SHA256 was checked against local bytes.
 - [ ] Engine commits and model revisions are full immutable revisions.
 - [ ] Default download endpoints and all overrides are documented.

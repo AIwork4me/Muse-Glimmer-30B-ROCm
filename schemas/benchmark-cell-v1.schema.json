@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm/schemas/benchmark-cell-v1.schema.json",
-  "title": "Historical ROCm 7.2.1 benchmark cell",
+  "title": "Benchmark cell v1 (ROCm 7.2.1 and 7.14 evidence)",
   "type": "object",
   "additionalProperties": false,
   "required": ["study", "weight", "dflash", "vision", "np", "metrics", "mem", "acceptance", "manifest"],
@@ -67,6 +67,7 @@
         "seed": {"type": "integer"},
         "reps": {"type": "integer"},
         "build": {"type": "string"},
+        "rocm_version": {"type": "string", "minLength": 1},
         "rocm": {"type": "string"},
         "kernel": {"type": "string"},
         "date": {"type": "string", "format": "date"},

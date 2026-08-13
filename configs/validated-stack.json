@@ -51,6 +51,6 @@
   "benchmark_evidence": {
     "rocm_7_2_1_matrix": "docs/results/matrix/",
     "methodology": "docs/results/METHODOLOGY.md",
-    "rocm_7_14_status": "pending"
+    "forward_validation_manifest": "configs/rocm-7.14-gguf-validation.json"
   }
 }

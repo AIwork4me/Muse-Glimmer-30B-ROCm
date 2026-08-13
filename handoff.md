@@ -12,14 +12,16 @@ this repository documents, validates, benchmarks, and explains the engineering
 delta for Ryzen AI and Radeon.
 
 Only Ryzen AI MAX+ PRO 395 / Radeon 8060S (`gfx1151`) has project-validated
-evidence today. The committed benchmark matrix is historical ROCm 7.2.1
-evidence. Forward ROCm and Radeon tracks remain pending until their complete
-evidence bundles are accepted.
+evidence today. ROCm 7.2.1 remains the full historical reference stack. The
+ROCm 7.14 GGUF/llama.cpp track is project-validated within a reduced 17-cell
+scope; vLLM/BF16 and Radeon dGPU tracks remain pending.
 
 ## Sources of truth
 
 - [Validated stack](configs/validated-stack.json): hardware, host/runtime layers,
-  engine commits, model revisions, inference settings, and validation status.
+  engine commits, model revisions and historical reference status.
+- [ROCm 7.14 scoped manifest](configs/rocm-7.14-gguf-validation.json): archive,
+  runtime, scope, engine/model identities and evidence checksums.
 - [Artifact manifest](configs/artifact-manifest.json): model file sizes and
   SHA256 digests.
 - [Public claims](configs/public-claims.json): validated/planned/upstream status
@@ -74,7 +76,7 @@ uv sync --only-group ci --locked
 uv run --no-sync pytest -m "not gpu and not server" -v
 bash -n scripts/*.sh scripts/lib/*.sh
 uv run --no-sync shellcheck -x scripts/*.sh scripts/lib/*.sh
-python scripts/check_claim_consistency.py
+python3 scripts/check_claim_consistency.py
 git diff --check
 ```
 
@@ -87,8 +89,8 @@ raw evidence; hosted CI cannot supply that evidence.
 - Adaptation behavior or workaround classification → `docs/adaptation.md`
 - Historical result interpretation → `docs/results/benchmark.md` or
   `docs/results/METHODOLOGY.md`; never edit the raw cell to improve wording
-- Platform status → evidence bundle, review, then `configs/public-claims.json`
-  and `configs/validated-stack.json`
+- Platform/track status → evidence bundle, scoped manifest and review, then
+  `configs/public-claims.json`; keep the historical stack identity separate
 - Artifact identity → `configs/artifact-manifest.json`, only from verified bytes
 - New benchmark record format → a versioned schema and migration plan; do not
   silently change an active validation protocol

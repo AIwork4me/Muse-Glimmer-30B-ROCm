@@ -1,4 +1,4 @@
-"""Validate authoritative manifests and immutable historical benchmark cells."""
+"""Validate authoritative manifests and committed benchmark evidence."""
 
 import json
 from pathlib import Path
@@ -32,15 +32,23 @@ def test_reference_manifests_match_schemas():
     validate(ROOT / "configs/validated-stack.json", "validated-stack.schema.json")
     validate(ROOT / "configs/artifact-manifest.json", "artifact-manifest.schema.json")
     validate(ROOT / "configs/public-claims.json", "public-claims.schema.json")
+    validate(ROOT / "configs/rocm-7.14-gguf-validation.json",
+             "rocm-7.14-gguf-validation.schema.json")
 
 
 def test_historical_rocm_7_2_1_cells_match_v1_schema():
-    # Intentionally do not recurse: an active forward-validation track uses a
-    # different directory and must not be coupled to this historical v1 schema.
     cells = sorted((ROOT / "docs/results/matrix").glob("cell-*.json"))
     assert len(cells) == 21
     for cell in cells:
         validate(cell, "benchmark-cell-v1.schema.json")
+
+
+def test_scoped_rocm_7_14_cells_match_v1_schema():
+    cells = sorted((ROOT / "docs/results/matrix-714").glob("cell-*.json"))
+    assert len(cells) == 17
+    for cell in cells:
+        validate(cell, "benchmark-cell-v1.schema.json")
+        assert read_json(cell)["manifest"]["rocm_version"] == "7.14.0"
 
 
 def test_hardware_submission_schema_accepts_documented_shape():

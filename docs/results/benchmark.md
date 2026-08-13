@@ -363,35 +363,35 @@ done
 
 ---
 
-## Part 2b — ROCm 7.2.1 (community) vs 7.14.0 (first official gfx1151)
+## Part 2b — recorded ROCm 7.2.1 stack vs ROCm 7.14.0 gfx1151 distribution
 
-The same matrix re-run against official stable ROCm 7.14.0, side-by-side (7.2.1
-left intact). Same llama.cpp `0b1bad1`, flags, weights, prompt set, seeds —
-**only ROCm differs**. 17 cells (c=16 deferred to limit sustained-load freeze
-risk). Full result, tables, and the checklist:
-[`rocm-7.14/README.md`](rocm-7.14/README.md). Per-cell comparison:
-[`matrix-714/comparison.md`](matrix-714/comparison.md).
+The reduced matrix was run side-by-side with the historical 7.2.1 evidence left
+intact. Recorded invariants include llama.cpp `0b1bad1`, flags, model artifacts,
+prompt set and seeds; the intended experimental variable is the ROCm runtime.
+The 7.14 arm contains 17 of 21 planned cells, with all four `np=16` cells
+deferred. See the [scoped result](rocm-7.14/README.md), [machine-readable
+manifest](../../configs/rocm-7.14-gguf-validation.json), and [per-cell
+comparison](matrix-714/comparison.md).
 
-**Result: 7.14.0 ≈ 7.2.1 on per-token decode throughput.**
-
-| Metric | 7.14 vs 7.2.1 |
+| Observed metric | 7.14 vs 7.2.1 |
 |---|---|
-| TPOT c=1 (clean throughput) | **−0.4%** (identical) |
-| TPOT c=4 (clean throughput) | **−1.7%** (marginally faster, within noise) |
-| Greedy DFlash decode (Study 1) | **−6%** per-token (small real win on the verify path) |
-| Memory (VmPeak) | **−2.8% mean, every cell** |
-| DFlash acceptance | **identical** (Δ ≤ 1.2 pp) |
-| Stability | **0 dmesg/amdgpu errors in 6 h** (no #6370/#6165) |
+| TPOT `np=1` (11 cells) | mean **−0.4%**, range −6.4%…+9.0% |
+| TPOT `np=4` (6 cells) | mean **−1.7%**, range −5.4%…+0.2% |
+| Greedy Study 1 DFlash TPOT | **−5.8% / −6.4%**; independent repeats are needed before attributing a runtime improvement |
+| VmPeak mapped-address-space envelope | **−2.8% mean; lower in all 17 cells** |
+| DFlash acceptance | similar; largest observed difference **1.21 percentage points** |
+| Run observation | operator observed no incident in six hours; raw system logs were not retained |
 
-> **⚠ Do not read the aggregate-tok/s column across versions.** At `temp=1.0`
-> (Study 2/3), cross-ROCm numerical differences cause sampling divergence, so
-> the version emitting longer sequences scores higher `agg tok/s` without
-> decoding faster — the raw table shows a spurious **+40.6%** on one c=4 cell
-> that is really a 1.36× token-count artifact (per-token cost was −1.6%).
-> **TPOT is the cross-version throughput metric.** See
-> [METHODOLOGY.md §12](METHODOLOGY.md#12-cross-rocm-comparison-721-vs-7140--why-tpot-not-aggregate-toks).
+> **⚠ Aggregate tok/s is not the primary cross-version metric for sampled
+> cells.** At `temp=1.0` (Study 2/3), output-length differences can change
+> `Σtokens ÷ wall` without a corresponding per-token latency change. The largest
+> example is +40.6% aggregate tok/s for one `np=4` cell alongside 1.36× as many
+> generated tokens and −1.6% TPOT. TPOT is less length-confounded; it is not a
+> profiler-backed proof of the causal kernel mechanism. See [METHODOLOGY.md
+> §12](METHODOLOGY.md#12-cross-rocm-comparison-721-vs-7140--why-tpot-not-aggregate-toks).
 
-**Bottom line:** the first *official* gfx1151 ROCm brings **official support +
-stability + a small memory reduction**, not a decode speedup — single-stream
-decode on this APU is bandwidth-bound, and a bandwidth-bound kernel cannot speed
-up by changing ROCm.
+**Interpretation:** the observed means do not establish a general decode
+speedup. The lower VmPeak values describe virtual mapped-address-space envelopes,
+not resident physical-memory savings. The run also does not establish AMD
+support for the exact Ryzen AI MAX+ PRO 395 SKU or standalone stability; those
+claims require different evidence.

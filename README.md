@@ -211,13 +211,15 @@ cgroup accounting.
 - **Validated historical/reference stack:** ROCm 7.2.1 host toolchain plus the
   recorded TheRock runtime. Existing benchmark JSON is immutable evidence.
 - **ROCm 7.14 gfx1151 track:** the reduced **GGUF/llama.cpp matrix is
-  project-validated** on Ryzen AI MAX+ PRO 395 (17 of 21 planned cells; the four
+  project-validated** on Ryzen AI MAX+ PRO 395 / Radeon 8060S,
+  17 of 21 planned cells; the four
   `np=16` cells were intentionally deferred). The vLLM/BF16 track remains
   pending, so ROCm 7.14 is not presented as a globally validated replacement
   for the historical stack. No ROCm 7.2.1 result is relabeled or overwritten.
 <!-- END GENERATED: validation-tracks -->
 
-See [ROCm 7.14 validation](docs/results/rocm-7.14/README.md).
+See [ROCm 7.14 scoped validation](docs/results/rocm-7.14/README.md) and its
+[machine-readable manifest](configs/rocm-7.14-gguf-validation.json).
 
 ## Requirements and operating notes
 
