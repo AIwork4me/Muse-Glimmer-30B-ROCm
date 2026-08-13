@@ -1,0 +1,54 @@
+{
+  "study": "study1",
+  "weight": "dynamic",
+  "dflash": false,
+  "vision": false,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 9.111117910111451,
+    "total_tokens": 1536,
+    "wall_s": 168.58524005000072,
+    "ttft_p50": 0.4958573065014207,
+    "ttft_p90": 0.49952190500334837,
+    "tpot_median": 0.10848774645096901,
+    "agg_tok_s_min": 9.050586449132545,
+    "agg_tok_s_max": 9.122303552522308,
+    "reps": 3,
+    "finish_reason_dist": {
+      "length": 18
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 27235268,
+    "VmPeak_gib": 25.97,
+    "VmHWM_kib": 1572144,
+    "VmHWM_gib": 1.5,
+    "VmRSS_kib": 1572144,
+    "VmRSS_gib": 1.5,
+    "RssShmem_kib": 878660,
+    "RssShmem_gib": 0.84,
+    "vram_used_mib": 1111.7,
+    "vram_total_mib": 32768.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 0.0,
+    "draft_tokens": 0.0,
+    "avg_accepted_per_step": null
+  },
+  "acceptance_source": "metrics",
+  "power_temp": {
+    "power_w": null,
+    "temp_c": 63.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-dynamic.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 0 --seed 0 --metrics --port 8080 --host 127.0.0.1",
+    "seed": 0,
+    "reps": 3,
+    "build": "0b1bad1",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon 8060S Graphics\", \"Card Model\": \"0x1586\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"STRXLGEN\", \"Subsystem ID\": \"-0x72ff\", \"Device Rev\": \"0xd1\", \"Node ID\": \"1\", \"GUID\": \"21984\", \"GFX Version\": \"gfx1151\"}}",
+    "kernel": "6.17.0-1032-oem",
+    "date": "2026-08-13"
+  }
+}

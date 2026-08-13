@@ -1,0 +1,61 @@
+{
+  "study": "study1",
+  "weight": "17gb",
+  "dflash": true,
+  "vision": false,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 23.082820466012876,
+    "total_tokens": 1536,
+    "wall_s": 66.54299470299156,
+    "ttft_p50": 0.4692026594930212,
+    "ttft_p90": 0.4809245435099001,
+    "tpot_median": 0.04539286971760471,
+    "agg_tok_s_min": 23.076939865952667,
+    "agg_tok_s_max": 23.176895065992056,
+    "reps": 3,
+    "finish_reason_dist": {
+      "length": 18
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 27310932,
+    "VmPeak_gib": 26.05,
+    "VmHWM_kib": 2280596,
+    "VmHWM_gib": 2.17,
+    "VmRSS_kib": 2280596,
+    "VmRSS_gib": 2.17,
+    "RssShmem_kib": 1212976,
+    "RssShmem_gib": 1.16,
+    "vram_used_mib": 1374.4,
+    "vram_total_mib": 32768.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 3927,
+    "draft_tokens": 16842,
+    "acceptance_rate": 0.23316708229426433,
+    "avg_accepted_per_step": 4.8625
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": null,
+    "temp_c": 62.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 0 --seed 0 --metrics --port 8080 --host 127.0.0.1 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 16",
+    "seed": 0,
+    "reps": 3,
+    "build": "0b1bad1",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon 8060S Graphics\", \"Card Model\": \"0x1586\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"STRXLGEN\", \"Subsystem ID\": \"-0x72ff\", \"Device Rev\": \"0xd1\", \"Node ID\": \"1\", \"GUID\": \"21984\", \"GFX Version\": \"gfx1151\"}}",
+    "kernel": "6.17.0-1032-oem",
+    "date": "2026-08-13"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 3927.0,
+    "draft_tokens": 16842.0,
+    "avg_accepted_per_step": 3.3766122098022358,
+    "acceptance_rate": 0.23316708229426433
+  }
+}

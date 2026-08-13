@@ -200,8 +200,11 @@ cgroup accounting.
 
 - **Validated historical/reference stack:** ROCm 7.2.1 host toolchain plus the
   recorded TheRock runtime. Existing benchmark JSON is immutable evidence.
-- **Current official gfx1151 track:** ROCm 7.14. Results are **pending** until
-  the checklist is rerun. No 7.2.1 result is relabeled or overwritten.
+- **Current official gfx1151 track:** ROCm 7.14. The **GGUF/llama.cpp matrix is
+  validated** (2026-08-13): 7.14.0 matches 7.2.1 on per-token decode throughput
+  (TPOT c=1 −0.4%, c=4 −1.7%), with a consistent −2.8% VmPeak, identical DFlash
+  acceptance, and zero stability incidents in 6 h. The vLLM/BF16 track remains
+  pending. No 7.2.1 result is relabeled or overwritten.
 
 See [ROCm 7.14 validation](docs/results/rocm-7.14/README.md).
 

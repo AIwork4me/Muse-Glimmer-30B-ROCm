@@ -16,12 +16,16 @@ non-completions. Both are results.
 
 ## Current official gfx1151 track — ROCm 7.14
 
-Status: **in progress / not yet published as a validated result set**.
+Status: **GGUF matrix validated (2026-08-13); vLLM/BF16 track pending.**
 
-A small number of raw cells may exist in `matrix-714/` while the rerun is in
-progress. Partial cells are not a completed comparison and must not be promoted
-to the README headline. Follow the [ROCm 7.14 checklist](rocm-7.14/README.md);
-render and compare only after its gates pass.
+The 7.14 GGUF matrix (17 cells, c=16 deferred) ran against official stable
+ROCm 7.14.0 side-by-side with 7.2.1 — same llama.cpp `0b1bad1`, flags, weights,
+prompts, seeds; only ROCm differs. **Result: 7.14.0 ≈ 7.2.1 on per-token decode
+throughput (TPOT c=1 −0.4%, c=4 −1.7%), with a consistent −2.8% VmPeak and
+identical DFlash acceptance; zero stability incidents in 6 h.** Aggregate
+`tok/s` at `temp=1.0` is length-confounded (sampling divergence inflates it) —
+see the [result summary](rocm-7.14/README.md) and
+[METHODOLOGY.md §12](METHODOLOGY.md). Raw cells: [matrix-714/](matrix-714/).
 
 Rules:
 

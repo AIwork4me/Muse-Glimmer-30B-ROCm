@@ -1,0 +1,62 @@
+{
+  "study": "study2",
+  "weight": "dynamic",
+  "dflash": true,
+  "vision": false,
+  "np": 4,
+  "metrics": {
+    "agg_tok_s": 31.102408829399668,
+    "total_tokens": 11726,
+    "wall_s": 387.1242328540102,
+    "ttft_p50": 0.9758184974998585,
+    "ttft_p90": 1.3152652517979733,
+    "tpot_median": 0.12137185484638796,
+    "agg_tok_s_min": 30.014872070345078,
+    "agg_tok_s_max": 31.607424598021385,
+    "reps": 5,
+    "finish_reason_dist": {
+      "length": 102,
+      "stop": 18
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 35885380,
+    "VmPeak_gib": 34.22,
+    "VmHWM_kib": 6876752,
+    "VmHWM_gib": 6.56,
+    "VmRSS_kib": 6876752,
+    "VmRSS_gib": 6.56,
+    "RssShmem_kib": 1262272,
+    "RssShmem_gib": 1.2,
+    "vram_used_mib": 1376.8,
+    "vram_total_mib": 32768.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 48097,
+    "draft_tokens": 250942,
+    "acceptance_rate": 0.1916658032533414,
+    "avg_accepted_per_step": 4.030390625
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": null,
+    "temp_c": 62.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-dynamic.gguf -ngl 999 -np 4 -c 32768 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 16",
+    "seed": 42,
+    "reps": 5,
+    "build": "0b1bad1",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon 8060S Graphics\", \"Card Model\": \"0x1586\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"STRXLGEN\", \"Subsystem ID\": \"-0x72ff\", \"Device Rev\": \"0xd1\", \"Node ID\": \"1\", \"GUID\": \"21984\", \"GFX Version\": \"gfx1151\"}}",
+    "kernel": "6.17.0-1032-oem",
+    "date": "2026-08-13"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 48097.0,
+    "draft_tokens": 250942.0,
+    "avg_accepted_per_step": 2.833735933541507,
+    "acceptance_rate": 0.1916658032533414
+  }
+}

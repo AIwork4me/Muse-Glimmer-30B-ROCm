@@ -355,3 +355,38 @@ for W in models/muse-glimmer-30B-kquant-17gb.gguf models/muse-glimmer-30B-kquant
   "$B/llama-bench" -m "$W" -ngl 99 -p 512 -n 128 -o json >> docs/results/matrix/llama-bench.json
 done
 ```
+
+---
+
+## Part 2b — ROCm 7.2.1 (community) vs 7.14.0 (first official gfx1151)
+
+The same matrix re-run against official stable ROCm 7.14.0, side-by-side (7.2.1
+left intact). Same llama.cpp `0b1bad1`, flags, weights, prompt set, seeds —
+**only ROCm differs**. 17 cells (c=16 deferred to limit sustained-load freeze
+risk). Full result, tables, and the checklist:
+[`rocm-7.14/README.md`](rocm-7.14/README.md). Per-cell comparison:
+[`matrix-714/comparison.md`](matrix-714/comparison.md).
+
+**Result: 7.14.0 ≈ 7.2.1 on per-token decode throughput.**
+
+| Metric | 7.14 vs 7.2.1 |
+|---|---|
+| TPOT c=1 (clean throughput) | **−0.4%** (identical) |
+| TPOT c=4 (clean throughput) | **−1.7%** (marginally faster, within noise) |
+| Greedy DFlash decode (Study 1) | **−6%** per-token (small real win on the verify path) |
+| Memory (VmPeak) | **−2.8% mean, every cell** |
+| DFlash acceptance | **identical** (Δ ≤ 1.2 pp) |
+| Stability | **0 dmesg/amdgpu errors in 6 h** (no #6370/#6165) |
+
+> **⚠ Do not read the aggregate-tok/s column across versions.** At `temp=1.0`
+> (Study 2/3), cross-ROCm numerical differences cause sampling divergence, so
+> the version emitting longer sequences scores higher `agg tok/s` without
+> decoding faster — the raw table shows a spurious **+40.6%** on one c=4 cell
+> that is really a 1.36× token-count artifact (per-token cost was −1.6%).
+> **TPOT is the cross-version throughput metric.** See
+> [METHODOLOGY.md §12](METHODOLOGY.md#12-cross-rocm-comparison-721-vs-7140--why-tpot-not-aggregate-toks).
+
+**Bottom line:** the first *official* gfx1151 ROCm brings **official support +
+stability + a small memory reduction**, not a decode speedup — single-stream
+decode on this APU is bandwidth-bound, and a bandwidth-bound kernel cannot speed
+up by changing ROCm.

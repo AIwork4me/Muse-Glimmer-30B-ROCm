@@ -388,3 +388,43 @@ uv run --no-sync python scripts/render_matrix.py
 The exact serve flags are reproduced in each cell's `manifest.flags` field — the
 cell JSON is the authoritative record; the rendered tables in `matrix.md` and
 `benchmark.md` derive from it.
+
+---
+
+## 12. Cross-ROCm comparison (7.2.1 vs 7.14.0) — why TPOT, not aggregate tok/s
+
+The Part 2 comparison re-runs the identical matrix with only ROCm differing
+([rocm-7.14/README.md](rocm-7.14/README.md)). Comparing throughput **across ROCm
+versions** introduces a trap that within-version reporting does not have.
+
+**The trap.** `aggregate tok/s = Σ generated tokens ÷ max per-request wall`
+(§4). At `temp=0` (Study 1, greedy) both versions emit the *identical* token
+stream (greedy is deterministic), so `Σ tokens` is equal and aggregate tok/s is
+a clean throughput comparison. At `temp=1.0` (Study 2/3, sampling) it is not:
+different ROCm kernels produce minute floating-point differences in the logits;
+at `temp=1.0` these flip which token is sampled; the generations **diverge**
+(different text, different length, different stop points). The version that
+happens to emit longer sequences then scores a higher aggregate tok/s —
+**without decoding any faster**. In the 7.14 run this inflated the headline by
+up to +40.6% (17gb c=4 baseline: 1.36× more tokens emitted, per-token cost
+unchanged at −1.6%).
+
+**The clean metric.** **TPOT** (`(first→last token wall) ÷ tokens after first`,
+per-request median) is the per-token decode cost — a hardware/kernel property
+independent of *which* token is produced, so it is comparable across versions
+even when the token streams differ. DFlash **acceptance** is likewise comparable
+(same drafter + model + seed) and was identical (Δ ≤ 1.2 pp), confirming any
+throughput delta is runtime-side, not spec-decode-side.
+
+**Therefore the cross-version conclusion uses TPOT**, not aggregate tok/s:
+
+| | c=1 (11 cells) | c=4 (6 cells) |
+|---|---|---|
+| **TPOT Δ (7.14 vs 7.2.1)** | mean **−0.4%** | mean **−1.7%** (range −5.4%…+0.2%) |
+
+i.e. 7.14.0 matches 7.2.1 on per-token decode (bandwidth-bound; unchanged),
+within noise marginally faster at c=4. The aggregate-tok/s column is retained
+in [matrix-714/comparison.md](matrix-714/comparison.md) for completeness and
+consistency with the 7.2.1 reporting, but is **not** the cross-version
+throughput claim. This is the single most important caveat when reading the
+7.2.1-vs-7.14.0 tables.

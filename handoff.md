@@ -255,20 +255,26 @@ These are explicit non-goals or deferred items, not bugs:
 - **Vision via llama.cpp — DONE.** Study 3 (5 cells) confirms `--mmproj` loads +
   answers, with a memory delta matching Meta's envelope. See
   [`docs/results/benchmark.md` Study 3](docs/results/benchmark.md#study-3--vision-axis-temp-10---mmproj-test-image).
-- **ROCm 7.14.0 path — separate, side-by-side Part 2 plan (feasibility confirmed).**
-  7.14.0 was **released 2026-07-16** as the first ROCm with **official gfx1151 APU
-  support** (Ryzen AI MAX+ PRO 495/395, RDNA 3.5). It ships via **TheRock** (the new
-  modular build system) — *not* the legacy `repo.radeon.com/rocm/apt/` repo, which
-  tops out at 7.2.4 (so `apt` will not find 7.13/7.14). This project already uses
-  TheRock for gfx1151 PyTorch (`…rocm7.13.0a…`), so a 7.14.0 stack is the natural
-  next step. The plan: install TheRock 7.14.0 to its own prefix (non-destructive —
-  the 7.2.1 apt install + the immutable `master` matrix stay intact), rebuild
-  `llama.cpp` against it, and re-run the identical matrix with only ROCm differing.
-  **Caveat:** official ≠ bug-free — open APU unified-memory issues persist
-  ([#6370](https://github.com/ROCm/ROCm/issues/6370) GTT billing gap,
-  [#6165](https://github.com/ROCm/ROCm/issues/6165) hard freezes under sustained
-  inference) needing kernel `amdgpu`/TTM work; watch stability under load. See
-  spec §9 (P-D) and `docs/strix-halo-setup.md`.
+- **ROCm 7.14.0 path — DONE (GGUF/llama.cpp matrix validated 2026-08-13); vLLM/BF16
+  pending.** 7.14.0 (**released 2026-07-16**, first ROCm with official gfx1151 APU
+  support) was installed **side-by-side** at `~/rocm-7.14.0` from the official
+  stable tarball `therock-dist-linux-gfx1151-7.14.0.tar.gz` (relocatable,
+  non-destructive — the 7.2.1 apt install + the immutable 7.2.1 matrix are
+  untouched). llama.cpp `0b1bad1` rebuilt into `build-714/` against it; the
+  identical 17-cell matrix re-run (c=16 deferred). **Result: 7.14.0 ≈ 7.2.1 on
+  per-token decode throughput** (TPOT c=1 −0.4%, c=4 −1.7%), **−2.8% VmPeak**
+  (every cell), **identical DFlash acceptance**, **zero dmesg/amdgpu errors in 6
+  h** (no #6370/#6165). Key methodological caveat: at `temp=1.0`, aggregate
+  `tok/s` is **length-confounded** by cross-ROCm sampling divergence — the spurious
+  +40.6% on one c=4 cell is a token-count artifact (per-token cost −1.6%); **TPOT**
+  is the cross-version metric. See
+  [`docs/results/rocm-7.14/README.md`](docs/results/rocm-7.14/README.md) (result +
+  protocol),
+  [`METHODOLOGY.md §12`](docs/results/METHODOLOGY.md),
+  [`matrix-714/`](docs/results/matrix-714/), and the plan
+  [`docs/superpowers/plans/2026-08-13-rocm-714-isolation.md`](docs/superpowers/plans/2026-08-13-rocm-714-isolation.md).
+  The **vLLM/BF16 track** (Phase 4) remains pending (needs a matching 7.14 Python
+  stack without disturbing the historical one).
 - **No git remote / PR** — the repo is local-only. `master` holds the v1
   deliverable; `feat/llamacpp-dflash-benchmark` holds the DFlash + vision matrix
   (this branch). If a GitHub remote is added, the `ci.yml` workflow will run the
