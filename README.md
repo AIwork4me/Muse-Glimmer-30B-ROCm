@@ -11,67 +11,70 @@ repository records the engineering delta required for RDNA, validates it on real
 hardware, preserves raw results and failures, and makes the same protocol
 available to Radeon contributors.
 
-> **Recommended stack: ROCm 7.14.0** (AMD's first official gfx1151 release), with
+> **Recommended stack: ROCm 7.14.0** (an AMD-supported gfx1151 release), with
 > the **llama.cpp / GGUF** path as the default for single-user scenarios. ROCm
 > 7.2.1 is preserved as the fully-validated historical reference.
 
 <!-- BEGIN GENERATED: validated-platform -->
 **Actually validated here:** AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S,
-`gfx1151` (RDNA 3.5). Radeon dGPUs are planned, not claimed as validated.
+`gfx1151` (RDNA 3.5). Every additional platform remains evidence-gated by the matrix below.
 <!-- END GENERATED: validated-platform -->
+
+AMD's [ROCm 7.14 release notes](https://rocm.docs.amd.com/en/docs-7.14.0/about/release-notes.html)
+list Ryzen AI Max+ PRO 395 / Radeon 8060S as `gfx1151`. AMD platform support is
+distinct from the Muse-Glimmer workload validation and benchmark evidence
+produced independently by this project.
 
 The working method is:
 
 > **Adapt → Validate → Benchmark → Explain → Reproduce**
 
-## Choose a path
-
-| Path | Best for | What you get |
-|---|---|---|
-| **llama.cpp + Meta GGUF (default, ROCm 7.14)** | Single-user chat, low memory, quick start | Pinned HIP build, validated K-quant, optional vision + DFlash |
-| **vLLM + BF16 (deferred / pending)** | Multi-user, agentic tool parsing, 128K context | Validated only on the ROCm 7.2.1 reference; not the focus for single-user gfx1151 |
-
-### Default path — llama.cpp + Meta GGUF (ROCm 7.14)
+## Quick start — Ryzen AI, ROCm 7.14, GGUF
 
 ```bash
 git clone https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm.git
 cd Muse-Glimmer-30B-ROCm
+bash scripts/install-rocm-7.14.sh
 bash scripts/00-check-env.sh
 bash scripts/gguf-quickstart.sh
 # OpenAI-compatible server: http://127.0.0.1:8080
 ```
 
-The quick start defaults to **ROCm 7.14.0** (the official gfx1151 release). If
-`~/rocm-7.14.0` is absent it falls back to the system `/opt/rocm` (7.2.1); install
-7.14 explicitly with `bash scripts/install-rocm-7.14.sh`. It checks out the
-validated llama.cpp commit, downloads from official Hugging Face at the recorded
-revision, verifies size/SHA256, and reuses a matching build on reruns. Add
-`WITH_MMPROJ=1` for vision or `WITH_DFLASH=1` for single-stream speculative
-decoding.
-
-### vLLM + BF16 (deferred)
-
-vLLM/BF16 is **deferred (pending)** here: Ryzen AI MAX+ 395 / Radeon are
-predominantly single-user, where the lighter llama.cpp path fits better, and a
-rocBLAS BF16-GEMM proxy showed **no 7.14 compute gain over 7.2.1**. vLLM remains
-validated on the **ROCm 7.2.1** historical reference (full features: reasoning +
-ATEM tool parsing, vision, 128K context, continuous batching) for those who need
-them:
+Prefer a confirmed one-command entry point? The optional wrapper prints the
+manifest-derived ROCm/model download sizes and waits for approval before it
+starts either download:
 
 ```bash
-uv sync
-bash scripts/01-build-vllm.sh     # builds against /opt/rocm (7.2.1)
-bash scripts/02-fetch-model.sh
-bash scripts/03-serve-vllm.sh
-# OpenAI-compatible server: http://127.0.0.1:8000
+bash scripts/quickstart.sh       # interactive y/N confirmation
+bash scripts/quickstart.sh --yes # explicit non-interactive approval
+```
+
+The installer is idempotent: it installs AMD's gfx1151 ROCm 7.14 archive at
+`~/rocm-7.14.0` without overwriting `/opt/rocm`. The environment checker and
+quickstart share one resolver, so both select that 7.14 installation. ROCm 7.2.x
+at `/opt/rocm` is accepted only as a clearly reported historical fallback.
+
+The first run downloads about 1.6 GiB for ROCm when it is not already installed,
+then the 15.6 GiB default GGUF. The quickstart checks out the validated
+llama.cpp commit, verifies the model's exact size and SHA256, builds HIP for
+`gfx1151`, and reuses matching assets on reruns. It needs `git`, `cmake`,
+`curl`, Python 3, and the selected HIP toolchain; it does **not** require
+PyTorch, `uv`, or the vLLM environment.
+
+Optional features use the same path:
+
+```bash
+WITH_MMPROJ=1 bash scripts/gguf-quickstart.sh  # image input
+WITH_DFLASH=1 bash scripts/gguf-quickstart.sh  # single-stream speculative decoding
 ```
 
 ## Headline validated results
 
 These figures are validated on **ROCm 7.14.0** (the recommended default) via the
-GGUF/llama.cpp matrix ([`docs/results/matrix-714/`](docs/results/matrix-714/)),
-and reproduce the ROCm 7.2.1 reference within noise (TPOT within ±2%; see
-[`matrix-714/comparison.md`](docs/results/matrix-714/comparison.md)). They are
+GGUF/llama.cpp matrix ([`docs/results/matrix-714/`](docs/results/matrix-714/)).
+Mean TPOT delta versus 7.2.1 was -0.4% at `np=1` and -1.7% at `np=4`;
+individual cells ranged from -6.4% to +9.0% and -5.4% to +0.2%, respectively
+([comparison](docs/results/matrix-714/comparison.md)). These are
 `gfx1151` results, not Radeon dGPU claims.
 
 ### Study 1 — Meta-aligned DFlash anchor
@@ -114,6 +117,33 @@ Full definitions, raw JSON, variance and negative cells:
 - [ROCm 7.14 matrix (headline)](docs/results/matrix-714/) · [7.2.1 vs 7.14 comparison](docs/results/matrix-714/comparison.md)
 - [Historical ROCm 7.2.1 matrix (supplementary)](docs/results/matrix/) — full 21-cell matrix, vLLM head-to-head, llama-bench
 - [Validation-track index](docs/results/README.md)
+
+## Optional advanced path — vLLM + BF16
+
+| Path | Best for | Status |
+|---|---|---|
+| **llama.cpp + Meta GGUF** | Single-user chat, low-memory onboarding | Default; project-validated on ROCm 7.14 |
+| **vLLM + BF16** | Multi-user serving, agentic tool parsing, 128K context | Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer validation pending |
+
+**Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM validation
+pending.** The upstream model-support [PR #51655](https://github.com/vllm-project/vllm/pull/51655)
+is open and remains a separate dependency; AMD's ROCm platform support does not
+imply Muse-Glimmer model support in vLLM. Historical vLLM/BF16 validation remains
+available on the **ROCm 7.2.1** reference (reasoning + ATEM tool parsing, vision,
+128K context, continuous batching). Current rocBLAS BF16-GEMM proxy results did
+not justify prioritizing a ROCm 7.14 vLLM rebuild for v0.1; this does not
+establish zero value for a future cohesive ROCm 7.14 vLLM stack. This optional
+path has separate Python 3.12, `uv`, TheRock PyTorch, and
+memory prerequisites:
+
+```bash
+uv sync --locked
+ROCM_PREFIX=/opt/rocm bash scripts/00-check-env.sh --profile vllm
+bash scripts/01-build-vllm.sh
+bash scripts/02-fetch-model.sh
+bash scripts/03-serve-vllm.sh
+# OpenAI-compatible server: http://127.0.0.1:8000
+```
 
 ## Why this repository exists
 
@@ -171,8 +201,8 @@ checked against the committed manifest.
 <!-- BEGIN GENERATED: hardware-matrix -->
 | Status | Platform | Evidence |
 |---|---|---|
-| ✅ **Validated** | Ryzen AI MAX+ PRO 395 / Radeon 8060S, `gfx1151` | Full recorded reference in this repository |
-| 🚧 **Planned** | Radeon W7900, `gfx1100` | No project evidence yet |
+| ✅ **Validated** | Ryzen AI MAX+ PRO 395 / Radeon 8060S, `gfx1151` | [Recorded project evidence](configs/validated-stack.json) |
+| 🚧 **Planned** | Radeon W7900, `gfx1100` | Requires a comparable community submission |
 | 🚧 **Planned** | Other RDNA3 / future RDNA4, `various` | Requires a comparable community submission |
 | 📘 **Upstream recipe** | MI300X / MI355X, `CDNA` | Upstream evidence; not revalidated here |
 <!-- END GENERATED: hardware-matrix -->
@@ -185,7 +215,7 @@ required manifest, command, logs and results. See
 
 | Configuration | Status |
 |---|---|
-| vLLM BF16 + `TRITON_ATTN` + TP=1 | Validated on the **7.2.1 reference** (deferred on 7.14) |
+| vLLM BF16 + `TRITON_ATTN` + TP=1 | Validated on the **7.2.1 reference**; ROCm 7.14 Muse-Glimmer validation pending |
 | llama.cpp HIP + 17GB/dynamic K-quant | Validated on `gfx1151` |
 | llama.cpp DFlash, c=1 or light c≤4 | Validated; speedup depends on workload |
 | `-md dflash.gguf` without `--spec-type draft-dflash` | Silent no-op; do not use |
@@ -225,8 +255,9 @@ cgroup accounting.
 - **ROCm 7.14 gfx1151 (recommended default):** the reduced **GGUF/llama.cpp
   matrix is project-validated** on Ryzen AI MAX+ PRO 395 / Radeon 8060S,
   17 of 21 planned cells; the four `np=16` cells
-  were deferred. The BF16/vLLM track was **evaluated and is not pursued** (rocBLAS BF16-GEMM
-  proxy: no 7.14 compute gain); vLLM/BF16 stays on the 7.2.1 reference, so ROCm 7.14 is not
+  were deferred. **Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM
+  validation pending.** Current rocBLAS BF16-GEMM proxy results did not justify prioritizing
+  a 7.14 rebuild; vLLM/BF16 stays validated on the 7.2.1 reference, so ROCm 7.14 is not
   presented as a globally validated replacement for the historical stack.
 - **ROCm 7.2.1 (historical reference, supplementary):** the full validated stack —
   the complete benchmark matrix, the vLLM-vs-llama.cpp head-to-head, and llama-bench — is
@@ -238,14 +269,15 @@ See [ROCm 7.14 scoped validation](docs/results/rocm-7.14/README.md) and its
 
 ## Requirements and operating notes
 
-- Linux kernel **≥ 6.16.9**; the comparison includes patch level.
-- Python **3.12** for the recorded TheRock wheel line.
+- For this project's validated Strix Halo host, kernel **≥ 6.16.9** avoids
+  the observed UMA/KFD issue. AMD's [current RDNA3.5 requirements](https://rocm.docs.amd.com/en/latest/reference/system-optimization/rdna3-5.html)
+  use distribution-specific kernel lines; 6.16.9 is not a universal ROCm floor.
 - About 20 GiB available for the default GGUF path; at least 60 GiB
   GPU-visible unified memory for the validated BF16 path.
-- `uv`, `git`, `cmake`, `curl`, and a gfx1151-capable HIP toolchain.
-- `uv run --no-sync` remains required after the editable vLLM source install;
-  a normal sync reconstructs the locked environment and removes that editable
-  install.
+- Default GGUF path: git, cmake, curl, Python 3, and a gfx1151-capable HIP
+  toolchain. PyTorch and uv are not required.
+- Optional vLLM path: Python 3.12, uv, and the locked TheRock runtime.
+  uv run --no-sync remains required after the editable vLLM source install.
 
 Setup and failure modes:
 

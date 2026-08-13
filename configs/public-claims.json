@@ -5,7 +5,8 @@
   "validated_platform": {
     "hardware": "AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S",
     "gpu_arch": "gfx1151",
-    "status": "validated"
+    "status": "validated",
+    "evidence": "configs/validated-stack.json"
   },
   "reference_evidence": {
     "rocm": "7.2.1",
@@ -26,8 +27,8 @@
       },
       {
         "name": "BF16/vLLM",
-        "status": "evaluated-not-pursued",
-        "scope": "deferred: single-user scenarios use the llama.cpp path; the 7.14 vLLM perf question was evaluated by rocBLAS BF16-GEMM proxy (7.14 == 7.2.1, no compute gain), so vLLM/BF16 stays on the 7.2.1 reference and is not prioritized",
+        "status": "pending",
+        "scope": "optional and not prioritized for v0.1: ROCm 7.14 Muse-Glimmer vLLM validation is pending; historical ROCm 7.2.1 vLLM validation remains available, and current rocBLAS BF16-GEMM proxy results did not justify prioritizing a 7.14 rebuild",
         "evidence": "scripts/bench_rocblas_gemm.cpp"
       }
     ]
@@ -36,7 +37,8 @@
     {
       "hardware": "Ryzen AI MAX+ PRO 395 / Radeon 8060S",
       "gpu_arch": "gfx1151",
-      "status": "validated"
+      "status": "validated",
+      "evidence": "configs/validated-stack.json"
     },
     {
       "hardware": "Radeon W7900",

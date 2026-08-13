@@ -31,7 +31,8 @@ release gates are complete.
 - Reframed **ROCm 7.14.0 as the recommended default** — primary headline + default
   install/build (`scripts/install-rocm-7.14.sh`, `gguf-quickstart.sh` defaults to
   `~/rocm-7.14.0`). The llama.cpp/GGUF path is the focus for single-user gfx1151;
-  vLLM/BF16 is demoted to pending (validated on the 7.2.1 reference); 7.2.1 is the
+  vLLM/BF16 is optional / not prioritized for v0.1, with ROCm 7.14 Muse-Glimmer
+  validation pending and historical 7.2.1 validation preserved. 7.2.1 is the
   supplementary historical reference. `public-claims.json` marks the 7.14 track
   `recommended: true` (asserted by the consistency checker).
 
@@ -40,5 +41,6 @@ release gates are complete.
 - Historical ROCm 7.2.1 benchmark cells, including negative and
   non-completing findings.
 - All committed ROCm 7.14 raw summary cells; the GGUF track is scoped to 17/21,
-  while BF16/vLLM was evaluated and not pursued (rocBLAS BF16-GEMM proxy: no 7.14 compute gain over 7.2.1).
+  while current rocBLAS BF16-GEMM proxy results did not justify prioritizing a
+  ROCm 7.14 Muse-Glimmer vLLM rebuild for v0.1.
 - Radeon dGPU validation status as planned.

@@ -25,11 +25,14 @@ Every gotcha we hit, as **symptom → cause → fix**. Skim the left column.
 **Symptom:** `rocm-smi` / `rocminfo` reports only ~15.5 GB; vLLM OOMs on a model
 that should fit; `00-check-env.sh` fails the VRAM check.
 
-**Cause:** Kernel < 6.16.9 mishandles the KFD/HSA unified-memory accounting, so
-ROCm only sees a sliver of the 94 GiB pool ([ROCm/ROCm#5444][uma]).
+**Cause observed on the project host:** kernels below 6.16.9 lacked the
+KFD/HSA behavior needed by this 94 GiB Strix Halo setup, so ROCm exposed only a
+small part of the pool ([ROCm/ROCm#5444][uma]).
 
-**Fix:** Upgrade to kernel **≥ 6.16.9** (this host runs 6.17). No ROCm change
-recovers the missing memory on an old kernel.
+**Project-reference fix:** use kernel **≥ 6.16.9** (the recorded hosts run
+6.17). For other installations, follow AMD's [distribution-specific RDNA3.5
+kernel requirements](https://rocm.docs.amd.com/en/latest/reference/system-optimization/rdna3-5.html);
+6.16.9 is not asserted as a universal ROCm 7.14 floor.
 
 ## aiter
 

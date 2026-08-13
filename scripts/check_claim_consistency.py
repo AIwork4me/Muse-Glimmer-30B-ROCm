@@ -7,6 +7,9 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from statistics import mean
+
+from compare_rocm import load_matrix, tpot_deltas_by_concurrency
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
@@ -42,20 +45,101 @@ def platform_summary(claims: dict, stack: dict) -> str:
     return (
         f"**Actually validated here:** {platform['hardware']},\n"
         f"`{platform['gpu_arch']}` ({stack['platform']['architecture_family']}). "
-        "Radeon dGPUs are planned, not claimed as validated."
+        "Every additional platform remains evidence-gated by the matrix below."
     )
 
 
 def evidence_for(item: dict) -> str:
     if item["status"] == "validated":
-        return "Full recorded reference in this repository"
+        return f"[Recorded project evidence]({item['evidence']})"
     if item["status"] == "community-validated":
-        return "Accepted independent evidence bundle"
+        return f"[Accepted evidence bundle]({item['evidence']})"
     if item["status"] == "upstream-recipe":
         return "Upstream evidence; not revalidated here"
-    if item["hardware"] == "Radeon W7900":
-        return "No project evidence yet"
     return "Requires a comparable community submission"
+
+
+def resolve_evidence_path(value: str, root: Path = ROOT) -> Path:
+    require(bool(value), "accepted evidence path must not be empty")
+    relative = Path(value)
+    require(not relative.is_absolute(), f"evidence path must be repository-relative: {value}")
+    candidate = (root / relative).resolve()
+    require(candidate.is_relative_to(root.resolve()), f"evidence path escapes repository: {value}")
+    require(candidate.exists(), f"evidence path does not exist: {value}")
+    return candidate
+
+
+def validate_hardware_matrix(
+    hardware: list[dict],
+    primary: dict,
+    primary_evidence: str,
+    root: Path = ROOT,
+) -> None:
+    identities = [(item["hardware"], item["gpu_arch"]) for item in hardware]
+    require(len(identities) == len(set(identities)),
+            "hardware matrix contains duplicate platform identities")
+
+    def normalized_hardware(value: str) -> str:
+        return value.removeprefix("AMD ")
+
+    primary_rows = []
+    for item in hardware:
+        require(item["status"] in STATUS,
+                f"unknown hardware status: {item['status']}")
+        if item["status"] not in {"validated", "community-validated"}:
+            continue
+        evidence = item.get("evidence")
+        require(isinstance(evidence, str),
+                f"{item['hardware']}: validation status requires evidence")
+        evidence_path = resolve_evidence_path(evidence, root)
+        is_primary = evidence == primary_evidence
+        if is_primary:
+            require(item["status"] == "validated",
+                    "community validation cannot cite the primary stack as independent evidence")
+            require(normalized_hardware(item["hardware"]) ==
+                    normalized_hardware(primary["hardware"]) and
+                    item["gpu_arch"] == primary["gpu_arch"],
+                    "primary evidence is attached to the wrong hardware row")
+            primary_rows.append(item)
+            continue
+
+        require(evidence_path.is_file(),
+                f"{item['hardware']}: evidence must name a hardware-validation manifest")
+        try:
+            bundle = json.loads(evidence_path.read_text(encoding="utf-8"))
+            bundle_hardware = bundle["hardware"]
+            result = bundle["result"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise ValueError(
+                f"{item['hardware']}: invalid hardware-validation evidence: {evidence}"
+            ) from exc
+        require(normalized_hardware(bundle_hardware["gpu"]) ==
+                normalized_hardware(item["hardware"]) and
+                bundle_hardware["gfx_target"] == item["gpu_arch"],
+                f"{item['hardware']}: evidence identity disagrees with public claim")
+        require(result.get("status") == "pass",
+                f"{item['hardware']}: evidence does not record a passing result")
+
+    require(len(primary_rows) == 1,
+            "hardware matrix must contain exactly one row for the primary stack evidence")
+
+
+def validate_forward_tracks(
+    track_items: list[dict], root: Path = ROOT
+) -> dict[str, dict]:
+    tracks = {track["name"]: track for track in track_items}
+    require(len(tracks) == len(track_items),
+            "forward validation track names must be unique")
+    for track in track_items:
+        require(track["status"] in {"project-validated", "pending"},
+                f"unknown forward-track status: {track['status']}")
+        evidence = track.get("evidence")
+        if track["status"] == "project-validated":
+            require(isinstance(evidence, str),
+                    f"{track['name']}: project-validated track requires evidence")
+        if evidence is not None:
+            resolve_evidence_path(evidence, root)
+    return tracks
 
 
 def readme_hardware_table(claims: dict) -> str:
@@ -87,9 +171,11 @@ def validation_tracks(claims: dict, forward_manifest: dict) -> str:
         f"  matrix is project-validated** on {platform['hardware'].removeprefix('AMD ')},\n"
         f"  {scope['completed_cells']} of {scope['planned_cells']} planned cells; the "
         "four `np=16` cells\n"
-        "  were deferred. The BF16/vLLM track was **evaluated and is not pursued** "
-        "(rocBLAS BF16-GEMM\n"
-        "  proxy: no 7.14 compute gain); vLLM/BF16 stays on the 7.2.1 reference, so "
+        "  were deferred. **Optional / not prioritized for v0.1; ROCm 7.14 "
+        "Muse-Glimmer vLLM\n"
+        "  validation pending.** Current rocBLAS BF16-GEMM proxy results did not "
+        "justify prioritizing\n"
+        "  a 7.14 rebuild; vLLM/BF16 stays validated on the 7.2.1 reference, so "
         "ROCm 7.14 is not\n"
         "  presented as a globally validated replacement for the historical stack.\n"
         f"- **ROCm {reference['rocm']} (historical reference, supplementary):** the "
@@ -98,6 +184,31 @@ def validation_tracks(claims: dict, forward_manifest: dict) -> str:
         "llama-bench — is\n"
         "  preserved as immutable evidence. No result is relabeled or overwritten."
     )
+
+
+def expected_tpot_claim() -> tuple[str, str]:
+    """Render README and compact-doc claims directly from committed raw cells."""
+    before = load_matrix(str(ROOT / "docs/results/matrix"))
+    after = load_matrix(str(ROOT / "docs/results/matrix-714"))
+    grouped = tpot_deltas_by_concurrency(before, after)
+    require(set(grouped) == {1, 4}, "unexpected TPOT concurrency groups")
+
+    def pct(value: float) -> str:
+        return f"{value:+.1f}%"
+
+    np1 = grouped[1]
+    np4 = grouped[4]
+    full = (
+        f"Mean TPOT delta versus 7.2.1 was {pct(mean(np1))} at np=1 and "
+        f"{pct(mean(np4))} at np=4; individual cells ranged from "
+        f"{pct(min(np1))} to {pct(max(np1))} and "
+        f"{pct(min(np4))} to {pct(max(np4))}, respectively"
+    )
+    compact = (
+        f"mean TPOT delta was {pct(mean(np1))} at np=1 and "
+        f"{pct(mean(np4))} at np=4, while individual cells varied more"
+    )
+    return full, compact
 
 
 def verify_checksums(directory: Path, checksum_file: Path) -> None:
@@ -132,6 +243,8 @@ def check() -> None:
             "validated hardware disagrees with stack manifest")
     require(platform["gpu_arch"] == stack["platform"]["gpu_arch"],
             "validated gfx identity disagrees with stack manifest")
+    require(platform.get("evidence") == claims["validated_stack"],
+            "validated platform must cite the primary stack evidence")
 
     reference = claims["reference_evidence"]
     require(reference["rocm"] == stack["host"]["rocm_toolchain"],
@@ -142,30 +255,43 @@ def check() -> None:
             "historical evidence status disagrees with stack manifest")
 
     forward = claims["forward_validation"]
-    require(forward["rocm"] == "7.14.0" and
-            forward["status"] == "partially-validated",
-            "ROCm 7.14 must remain scoped rather than globally validated")
+    require(forward["rocm"] == forward_manifest["host"]["rocm_version"],
+            "recommended ROCm version disagrees with its validation manifest")
+    require(forward["status"] == "partially-validated",
+            "recommended ROCm track must remain scoped rather than globally validated")
     require(forward.get("recommended") is True,
             "ROCm 7.14 must be marked as the recommended default track")
     require(stack["benchmark_evidence"]["forward_validation_manifest"] ==
             forward["manifest"],
             "validated stack points to the wrong forward-validation manifest")
-    tracks = {track["name"]: track for track in forward["tracks"]}
-    require(len(tracks) == 2, "forward validation requires exactly two unique tracks")
+    tracks = validate_forward_tracks(forward["tracks"])
     require(tracks["GGUF/llama.cpp"]["status"] == "project-validated" and
             tracks["GGUF/llama.cpp"]["evidence"] == "docs/results/matrix-714/",
             "GGUF track must point to accepted scoped evidence")
-    require(tracks["BF16/vLLM"]["status"] == "evaluated-not-pursued" and
+    require(tracks["BF16/vLLM"]["status"] == "pending" and
             tracks["BF16/vLLM"]["evidence"] == "scripts/bench_rocblas_gemm.cpp",
-            "ROCm 7.14 BF16/vLLM must be recorded as evaluated-not-pursued with the GEMM proxy evidence")
+            "ROCm 7.14 BF16/vLLM must be pending with the GEMM proxy evidence")
+    vllm_scope = tracks["BF16/vLLM"]["scope"].lower()
+    require("not prioritized for v0.1" in vllm_scope and
+            "validation is pending" in vllm_scope,
+            "ROCm 7.14 BF16/vLLM scope must use the normalized pending vocabulary")
 
     require(forward_manifest["status"] == "validated-scoped",
             "ROCm 7.14 manifest lost scoped-validation status")
-    require(forward_manifest["scope"]["vllm_bf16_status"] == "evaluated-not-pursued",
-            "ROCm 7.14 manifest must record BF16/vLLM as evaluated-not-pursued")
+    require(forward_manifest["scope"]["vllm_bf16_status"] == "pending",
+            "ROCm 7.14 manifest must record BF16/vLLM as pending")
     require(forward_manifest["platform"]["hardware"] == platform["hardware"] and
             forward_manifest["platform"]["gpu_arch"] == platform["gpu_arch"],
             "ROCm 7.14 platform disagrees with validated hardware identity")
+    distribution_scope = forward_manifest["host"]["distribution_scope"]
+    require(platform["hardware"] in distribution_scope and
+            platform["gpu_arch"] in distribution_scope,
+            "AMD distribution scope does not name the claimed platform identity")
+    require("independent project evidence" in distribution_scope.lower(),
+            "AMD platform support must remain distinct from project workload evidence")
+    require(forward_manifest["host"]["release_notes"]["url"].startswith(
+                "https://rocm.docs.amd.com/"),
+            "ROCm platform support must cite authoritative AMD release notes")
     require(forward_manifest["llama_cpp"]["commit"] == stack["llama_cpp"]["commit"],
             "ROCm 7.14 llama.cpp commit disagrees with the reference stack")
     gguf = artifacts["sets"]["gguf"]
@@ -178,18 +304,12 @@ def check() -> None:
             "ROCm 7.14 cell count disagrees with its validation scope")
     for cell in cells_714:
         require(json.loads(cell.read_text(encoding="utf-8"))["manifest"]
-                ["rocm_version"] == "7.14.0",
+                ["rocm_version"] == forward["rocm"],
                 f"ROCm 7.14 cell is mislabeled: {cell.name}")
     verify_checksums(matrix_714, ROOT / forward_manifest["evidence"]["checksums"])
 
     hardware = claims["hardware_matrix"]
-    validated = [item for item in hardware if item["status"] == "validated"]
-    require(len(validated) == 1, "exactly one project platform may be validated")
-    require(validated[0]["gpu_arch"] == stack["platform"]["gpu_arch"],
-            "validated hardware matrix row disagrees with stack")
-    w7900 = [item for item in hardware if item["hardware"] == "Radeon W7900"]
-    require(len(w7900) == 1 and w7900[0]["status"] == "planned",
-            "Radeon W7900 must remain planned without accepted evidence")
+    validate_hardware_matrix(hardware, stack["platform"], claims["validated_stack"])
 
     for name, model_key, set_key in (
         ("BF16", "bf16", "bf16"),
@@ -209,6 +329,21 @@ def check() -> None:
             "pyproject provenance does not cite the validated vLLM commit")
 
     readme = README.read_text(encoding="utf-8")
+    benchmark_doc = (ROOT / "docs/results/benchmark.md").read_text(encoding="utf-8")
+    full_tpot_claim, compact_tpot_claim = expected_tpot_claim()
+    normalized_readme = " ".join(readme.replace("`", "").split())
+    normalized_benchmark = " ".join(
+        line.removeprefix("> ").replace("`", "").strip()
+        for line in benchmark_doc.splitlines()
+    )
+    require(full_tpot_claim in normalized_readme,
+            "README TPOT claim disagrees with committed matrix evidence")
+    require(compact_tpot_claim in normalized_benchmark,
+            "benchmark TPOT claim disagrees with committed matrix evidence")
+    require("TPOT within ±2%" not in readme and
+            "within noise" not in readme.lower() and
+            "within noise" not in benchmark_doc.lower(),
+            "cross-ROCm prose must not assert an unsupported universal noise bound")
     require(generated_block(readme, "validated-platform") ==
             platform_summary(claims, stack),
             "README validated-platform block is stale")
