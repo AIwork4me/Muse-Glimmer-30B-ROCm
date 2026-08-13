@@ -12,9 +12,10 @@
 
 An RDNA-focused inference + benchmarking project. Two serving paths, a full
 speed/memory matrix, **DFlash speculative decoding working on llama.cpp**, and
-the CDNA→RDNA adaptation documented delta-by-delta. **Not** for MI-series
-datacenter cards — Meta's MI300X recipe is the reference we adapt *from*, not a
-target.
+the CDNA→RDNA adaptation documented delta-by-delta. For **MI-series** (CDNA
+datacenter) cards, use Meta's official MI300X recipe directly
+([vllm-project/recipes#776](https://github.com/vllm-project/recipes/pull/776));
+this repo adapts that recipe to RDNA silicon.
 
 ---
 
@@ -56,14 +57,14 @@ target.
 |---|---|---|
 | ✅ Validated | **gfx1151 — Ryzen AI MAX+ 395 / Radeon 8060S "Strix Halo"** (RDNA 3.5) | All numbers in this repo are from this part. |
 | 🚧 Roadmap | **Radeon RDNA dGPUs** (e.g. W7900 / gfx1100-class) | Same RDNA family; planned follow-on. |
-| ❌ Out of scope | **MI-series** (CDNA datacenter, e.g. MI300X/MI355X) | Use Meta's upstream MI300X recipe directly; this project is RDNA-only. |
+| 📘 Upstream | **MI-series** (CDNA datacenter, e.g. MI300X/MI355X) | For CDNA cards, use Meta's official MI300X recipe: [vllm-project/recipes#776](https://github.com/vllm-project/recipes/pull/776). |
 
 ## Requirements
 
 | Item | Value |
 |---|---|
 | APU/GPU | gfx1151 (Ryzen AI MAX+ 395 / Radeon 8060S) |
-| ROCm | **7.2.1** (community-verified for gfx1151; 7.14.0 is the official alternative — see `docs/strix-halo-setup.md`) |
+| ROCm | **7.2.1** (community-verified; validated here). **7.14.0** (released 2026-07-16) is the **first official** gfx1151 release — it ships via **TheRock**, not the apt repo (which tops at 7.2.4). See `docs/strix-halo-setup.md`. |
 | Linux kernel | ≥ 6.16.9 (have 6.17; fixes a UMA "only 15.5 GB visible" bug) |
 | Python | 3.12 (gfx1151 wheels fail on 3.13) |
 | Free memory | ~20 GiB (GGUF path) · ~60 GiB (BF16 vLLM path) — unified LPDDR5X |
