@@ -113,8 +113,9 @@ TTFT p50/p90, TPOT median, VmPeak, finish_reason distribution, draft acceptance
 
 ### Study 3 — Vision axis
 
-**Purpose:** confirm the multimodal path loads + answers via `--mmproj`, and
-measure its memory delta vs text-only (cross-check Meta's ~+2 GB vision delta).
+**Purpose:** exercise multimodal loading and image-conditioned generation via
+`--mmproj`, and measure the mapped-memory delta vs text-only (a comparison
+with Meta's published ~+2 GB vision delta).
 
 | Axis | Value |
 |---|---|
@@ -152,7 +153,7 @@ prepend the fixed test image to the user message.
 
 | Metric | Definition | How captured |
 |---|---|---|
-| **decode tok/s (Study 1)** | `Σ generated tokens ÷ max per-request wall (t1−t0)` — the same formula used for Study 2/3 (decode-dominated at np=1; prefill negligible — `llama-bench` tg128 confirms) | counted from the SSE stream per-request; cross-checked vs server `usage.completion_tokens`. Includes reasoning tokens — by definition the total decode rate of the model. |
+| **decode tok/s (Study 1)** | `Σ generated tokens ÷ max per-request wall (t1−t0)` — the same formula used for Study 2/3 (decode-dominated at np=1; the `llama-bench` tg128 cross-check supports this interpretation) | counted from the SSE stream per-request; cross-checked vs server `usage.completion_tokens`. Includes reasoning tokens — by definition the total decode rate of the model. |
 | **aggregate tok/s (Study 2/3)** | `Σ generated tokens across all concurrent requests ÷ max per-request wall` | per-request stream counts, summed; matches the v1 harness so cross-run comparisons hold |
 | **TTFT** | request send → first streamed chunk; **p50 and p90** reported | `time.perf_counter()` around the SSE stream; loopback HTTP overhead negligible |
 | **TPOT** | `(first→last token wall) ÷ (tokens after first)`; **per-request median** reported | inter-chunk timestamps from the stream — the core DFlash metric (it lowers per-token decode cost) |
@@ -163,6 +164,10 @@ prepend the fixed test image to the user message.
 | **power/temp** | GPU temp (°C) during run | `rocm-smi --showtemp` (these ARE valid on Strix Halo, unlike VRAM). Power key not exposed for this APU; `power_w` left null. |
 
 ### Per-cell JSON schema
+
+The descriptive Draft 2020-12 definition is
+[`schemas/benchmark-cell-v1.schema.json`](../../schemas/benchmark-cell-v1.schema.json).
+It covers both completed and pathological/non-completing historical cells.
 
 Each cell record (`matrix/cell-*.json`) carries, verbatim:
 
@@ -249,12 +254,12 @@ The short version, for the science record:
   abort, the drafter had emitted **3,270,000 draft tokens** of which **6,060
   were accepted** — an acceptance rate of **0.0018 (0.18 %)**, ~1/37× the
   baseline aggregate rate.
-- **Root cause:** at `-np 16` the drafter fires for all 16 slots simultaneously,
+- **Observed proximate mechanism:** at `-np 16` the drafter fires for all 16 slots simultaneously,
   generating an enormous draft volume that is almost entirely rejected (>99.8 %
   in the dynamic run) while the full generate+verify compute for *all those
-  rejected drafts* is paid in full. The draft model's predictions diverge badly
-  from the target under batched concurrent load, so spec-decode goes into
-  reverse — it costs more than it saves.
+  rejected drafts* is paid in full. The acceptance collapse explains why
+  spec-decode costs more than it saves in these cells. The matrix does not
+  isolate a deeper causal split among drafter behavior, scheduling, and kernels.
 - **c=16 itself is fine** (baseline 17gb 34.5 tok/s, dynamic 31.0 tok/s). The
   pathology is **DFlash-specific**.
 
@@ -308,7 +313,7 @@ DFlash run.
 
 > This is the single most important "is DFlash even on?" check. A DFlash cell
 > that shows 1.0× with null acceptance has fallen into this trap. The matrix
-> shows 2.20× / 2.39× (Study 1), so spec-decode is genuinely engaged.
+> records non-zero draft activity and 2.20× / 2.39× Study 1 speedups.
 
 ---
 

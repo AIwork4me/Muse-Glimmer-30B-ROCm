@@ -19,6 +19,19 @@ dev = [
     "requests",
 ]
 
+# Minimal, CPU-only dependencies for hosted CI. This group deliberately omits
+# the project dependency set so ordinary pull requests do not download the
+# TheRock/ROCm runtime. The separate dependency-smoke workflow verifies it.
+ci = [
+    "aiohttp",
+    "actionlint-py",
+    "jsonschema",
+    "pyyaml",
+    "pytest",
+    "requests",
+    "shellcheck-py",
+]
+
 [tool.uv]
 required-version = ">=0.4"
 # TheRock torch wheels pull a deep tree of index-specific transitive deps
