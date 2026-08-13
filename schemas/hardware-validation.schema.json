@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm/schemas/hardware-validation.schema.json",
+  "title": "Community hardware validation submission",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "hardware", "software", "model", "inference", "result", "evidence"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "hardware": {
+      "type": "object",
+      "required": ["gpu", "gfx_target", "memory"],
+      "properties": {
+        "gpu": {"type": "string", "minLength": 1},
+        "gfx_target": {"pattern": "^gfx[0-9]+$"},
+        "memory": {"type": "string", "minLength": 1}
+      }
+    },
+    "software": {
+      "type": "object",
+      "required": ["rocm", "kernel", "python", "pytorch"],
+      "properties": {
+        "rocm": {"type": "string", "minLength": 1},
+        "kernel": {"type": "string", "minLength": 1},
+        "python": {"type": "string", "minLength": 1},
+        "pytorch": {"type": "string", "minLength": 1},
+        "vllm_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "llama_cpp_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "model": {
+      "type": "object",
+      "required": ["repository", "revision"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "inference": {
+      "type": "object",
+      "required": ["path", "command"],
+      "properties": {
+        "path": {"enum": ["vllm-bf16", "llama-cpp-gguf"]},
+        "command": {"type": "string", "minLength": 1}
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["pass", "fail"]},
+        "throughput_tok_s": {"type": "number", "minimum": 0},
+        "ttft_s": {"type": "number", "minimum": 0},
+        "tpot_s": {"type": "number", "minimum": 0},
+        "known_issues": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["memory_methodology", "artifact_url"],
+      "properties": {
+        "memory_methodology": {"type": "string", "minLength": 1},
+        "artifact_url": {"type": "string", "format": "uri"}
+      }
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm/schemas/benchmark-cell-v1.schema.json",
+  "title": "Historical ROCm 7.2.1 benchmark cell",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["study", "weight", "dflash", "vision", "np", "metrics", "mem", "acceptance", "manifest"],
+  "properties": {
+    "study": {"enum": ["study1", "study2", "study3"]},
+    "weight": {"enum": ["17gb", "dynamic"]},
+    "dflash": {"type": "boolean"},
+    "vision": {"type": "boolean"},
+    "np": {"type": "integer", "minimum": 1},
+    "pathological": {"type": "boolean"},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agg_tok_s", "total_tokens", "wall_s", "ttft_p50", "ttft_p90", "tpot_median", "reps", "finish_reason_dist"],
+      "properties": {
+        "agg_tok_s": {"type": ["number", "null"]},
+        "agg_tok_s_min": {"type": "number"},
+        "agg_tok_s_max": {"type": "number"},
+        "total_tokens": {"type": "integer", "minimum": 0},
+        "wall_s": {"type": ["number", "null"]},
+        "ttft_p50": {"type": ["number", "null"]},
+        "ttft_p90": {"type": ["number", "null"]},
+        "tpot_median": {"type": ["number", "null"]},
+        "reps": {"oneOf": [{"type": "integer", "minimum": 1}, {"const": "did_not_complete"}]},
+        "finish_reason_dist": {"type": "object", "additionalProperties": {"type": ["integer", "string"]}}
+      }
+    },
+    "mem": {
+      "type": "object",
+      "properties": {
+        "VmPeak_kib": {"type": "integer"},
+        "VmPeak_gib": {"type": "number"},
+        "VmHWM_kib": {"type": "integer"},
+        "VmHWM_gib": {"type": "number"},
+        "VmRSS_kib": {"type": "integer"},
+        "VmRSS_gib": {"type": "number"},
+        "RssShmem_kib": {"type": "integer"},
+        "RssShmem_gib": {"type": "number"},
+        "vram_used_mib": {"type": "number"},
+        "vram_total_mib": {"type": "number"}
+      },
+      "additionalProperties": false
+    },
+    "acceptance": {
+      "type": ["object", "null"],
+      "properties": {
+        "accepted_draft_tokens": {"type": "number"},
+        "draft_tokens": {"type": "number"},
+        "avg_accepted_per_step": {"type": ["number", "null"]},
+        "acceptance_rate": {"type": ["number", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "acceptance_metrics_secondary": {"type": "object"},
+    "acceptance_source": {"type": "string"},
+    "power_temp": {"type": "object"},
+    "llama_log_mem": {"type": "string"},
+    "pathological_evidence": {"type": "object"},
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "flags": {"type": "string"},
+        "seed": {"type": "integer"},
+        "reps": {"type": "integer"},
+        "build": {"type": "string"},
+        "rocm": {"type": "string"},
+        "kernel": {"type": "string"},
+        "date": {"type": "string", "format": "date"},
+        "note": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"pathological": {"const": true}}, "required": ["pathological"]},
+      "then": {
+        "required": ["pathological_evidence"],
+        "properties": {
+          "mem": {"maxProperties": 0},
+          "acceptance": {"type": "null"},
+          "metrics": {"properties": {"reps": {"const": "did_not_complete"}}}
+        }
+      },
+      "else": {
+        "properties": {
+          "metrics": {"required": ["agg_tok_s_min", "agg_tok_s_max"]},
+          "mem": {"required": ["VmPeak_kib", "VmPeak_gib", "VmHWM_kib", "VmHWM_gib", "VmRSS_kib", "VmRSS_gib", "RssShmem_kib", "RssShmem_gib", "vram_used_mib", "vram_total_mib"]},
+          "acceptance": {"type": "object"},
+          "manifest": {"required": ["flags", "seed", "reps", "build", "rocm", "kernel", "date"]}
+        }
+      }
+    }
+  ]
+}
