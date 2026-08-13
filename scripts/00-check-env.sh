@@ -23,10 +23,16 @@ MIN_KERNEL="$(read_manifest host.minimum_kernel)"
 MIN_VISIBLE_GIB="$(read_manifest host.gpu_visible_memory_min_gib)"
 
 
-# ROCm version (accept 7.2.x)
-rocm_ver="$(cat /opt/rocm/.info/version 2>/dev/null || echo none)"
-echo "ROCm: $rocm_ver"
-[[ "$rocm_ver" == 7.2.* ]] || fail "expected ROCm 7.2.x, got $rocm_ver"
+# ROCm version. The default/recommended track is 7.14.0 (~/rocm-7.14.0); the
+# historical reference is 7.2.1 (/opt/rocm). Honor ROCM_PATH/ROCM_PREFIX; accept either.
+ROCM_PREFIX="${ROCM_PATH:-${ROCM_PREFIX:-/opt/rocm}}"
+export PATH="$ROCM_PREFIX/bin:$PATH"
+rocm_ver="$(cat "$ROCM_PREFIX/.info/version" 2>/dev/null || echo none)"
+echo "ROCm ($ROCM_PREFIX): $rocm_ver"
+case "$rocm_ver" in
+    7.14.*|7.2.*) : ;;
+    *) fail "expected ROCm 7.14.x or 7.2.x at $ROCM_PREFIX, got '$rocm_ver'" ;;
+esac
 
 # Kernel floor (fixes the 15.5 GB UMA bug). Compare major, minor, and patch.
 krel="$(uname -r)"

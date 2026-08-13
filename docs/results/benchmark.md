@@ -3,7 +3,7 @@
 > Reproduce: start a server (`scripts/03-serve-vllm.sh` or
 > `scripts/gguf-quickstart.sh`), then `BASE=http://127.0.0.1:<port> bash
 > scripts/benchmark.sh`. Raw JSON lands in `docs/results/*.json` (gitignored
-> runtime artifacts); the numbers below are the validated reference runs. The
+> runtime artifacts); the numbers below are the **ROCm 7.2.1 historical reference** runs (the 7.14 GGUF headline matrix is in [`matrix-714/`](matrix-714/) and reproduces these within noise). The
 > head-to-head uses a controlled workload and matching concurrency, but precision,
 > engine, scheduler, and model format differ; treat it as a practical
 > workload-aligned comparison, not an architecture-normalized result.

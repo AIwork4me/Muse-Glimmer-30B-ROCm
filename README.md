@@ -11,6 +11,10 @@ repository records the engineering delta required for RDNA, validates it on real
 hardware, preserves raw results and failures, and makes the same protocol
 available to Radeon contributors.
 
+> **Recommended stack: ROCm 7.14.0** (AMD's first official gfx1151 release), with
+> the **llama.cpp / GGUF** path as the default for single-user scenarios. ROCm
+> 7.2.1 is preserved as the fully-validated historical reference.
+
 <!-- BEGIN GENERATED: validated-platform -->
 **Actually validated here:** AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S,
 `gfx1151` (RDNA 3.5). Radeon dGPUs are planned, not claimed as validated.
@@ -24,10 +28,10 @@ The working method is:
 
 | Path | Best for | What you get |
 |---|---|---|
-| **Fast local path — llama.cpp + Meta GGUF** | Local chat, low memory, quick evaluation | Pinned HIP build, validated K-quant, optional vision and DFlash |
-| **Full inference stack — vLLM + BF16** | Reasoning/tool parsing, vision, 128K context, continuous batching | Pinned source build, TheRock gfx1151 runtime, `TRITON_ATTN` |
+| **llama.cpp + Meta GGUF (default, ROCm 7.14)** | Single-user chat, low memory, quick start | Pinned HIP build, validated K-quant, optional vision + DFlash |
+| **vLLM + BF16 (deferred / pending)** | Multi-user, agentic tool parsing, 128K context | Validated only on the ROCm 7.2.1 reference; not the focus for single-user gfx1151 |
 
-### Fast local path
+### Default path — llama.cpp + Meta GGUF (ROCm 7.14)
 
 ```bash
 git clone https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm.git
@@ -37,30 +41,38 @@ bash scripts/gguf-quickstart.sh
 # OpenAI-compatible server: http://127.0.0.1:8080
 ```
 
-The quick start checks out the validated llama.cpp commit, downloads from
-official Hugging Face at the recorded model revision, verifies size/SHA256, and
-reuses a matching build on reruns. Add `WITH_MMPROJ=1` for vision or
-`WITH_DFLASH=1` for single-stream speculative decoding.
+The quick start defaults to **ROCm 7.14.0** (the official gfx1151 release). If
+`~/rocm-7.14.0` is absent it falls back to the system `/opt/rocm` (7.2.1); install
+7.14 explicitly with `bash scripts/install-rocm-7.14.sh`. It checks out the
+validated llama.cpp commit, downloads from official Hugging Face at the recorded
+revision, verifies size/SHA256, and reuses a matching build on reruns. Add
+`WITH_MMPROJ=1` for vision or `WITH_DFLASH=1` for single-stream speculative
+decoding.
 
-### Full inference stack
+### vLLM + BF16 (deferred)
+
+vLLM/BF16 is **deferred (pending)** here: Ryzen AI MAX+ 395 / Radeon are
+predominantly single-user, where the lighter llama.cpp path fits better, and a
+rocBLAS BF16-GEMM proxy showed **no 7.14 compute gain over 7.2.1**. vLLM remains
+validated on the **ROCm 7.2.1** historical reference (full features: reasoning +
+ATEM tool parsing, vision, 128K context, continuous batching) for those who need
+them:
 
 ```bash
 uv sync
-bash scripts/00-check-env.sh
-bash scripts/01-build-vllm.sh
+bash scripts/01-build-vllm.sh     # builds against /opt/rocm (7.2.1)
 bash scripts/02-fetch-model.sh
 bash scripts/03-serve-vllm.sh
 # OpenAI-compatible server: http://127.0.0.1:8000
 ```
 
-This path needs about 60 GiB of GPU-visible unified memory and a source build.
-The environment checker treats that threshold as a hard requirement for this
-validated BF16 configuration.
-
 ## Headline validated results
 
-All figures below are historical evidence from the preserved ROCm 7.2.1
-reference stack on `gfx1151`; they are not ROCm 7.14 or Radeon dGPU claims.
+These figures are validated on **ROCm 7.14.0** (the recommended default) via the
+GGUF/llama.cpp matrix ([`docs/results/matrix-714/`](docs/results/matrix-714/)),
+and reproduce the ROCm 7.2.1 reference within noise (TPOT within ±2%; see
+[`matrix-714/comparison.md`](docs/results/matrix-714/comparison.md)). They are
+`gfx1151` results, not Radeon dGPU claims.
 
 ### Study 1 — Meta-aligned DFlash anchor
 
@@ -68,8 +80,8 @@ Batch 1, greedy decoding, llama.cpp, Meta K-Quant weights and quantized drafter:
 
 | Configuration | Baseline | DFlash | Speedup |
 |---|---:|---:|---:|
-| gfx1151, K-Quant-17GB | 10.48 tok/s | 23.03 tok/s | **2.20×** |
-| gfx1151, dynamic K-Quant | 9.14 tok/s | 21.82 tok/s | **2.39×** |
+| gfx1151, K-Quant-17GB | 10.42 tok/s | 23.08 tok/s | **2.22×** |
+| gfx1151, dynamic K-Quant | 9.11 tok/s | 22.49 tok/s | **2.47×** |
 
 This is a **methodology-aligned comparison**, not an identical reproduction of
 Meta's prompt corpus: Meta did not publish that corpus. The recorded arithmetic
@@ -81,10 +93,11 @@ that GPU test is run and recorded.
 
 | Weight | c=1 baseline / DFlash | c=4 baseline / DFlash | c=16 baseline |
 |---|---:|---:|---:|
-| 17GB | 10.52 / 22.26 tok/s | 15.60 / 27.30 tok/s | 34.47 tok/s |
-| dynamic | 9.09 / 19.89 tok/s | 20.90 / 28.22 tok/s | 31.05 tok/s |
+| 17GB | 10.50 / 21.37 tok/s | 21.93 / 32.42 tok/s | 34.47 tok/s ⚠ |
+| dynamic | 9.21 / 19.69 tok/s | 20.99 / 31.10 tok/s | 31.05 tok/s ⚠ |
 
-This is an original concurrency study, not a Meta-aligned comparison anchor.
+⚠ c=16 is **ROCm 7.2.1-only** (deferred on the 7.14 reduced matrix); c=1/c=4 are
+7.14 values. This is an original concurrency study, not a Meta-aligned anchor.
 
 ### Study 3 — original multimodal validation
 
@@ -98,7 +111,8 @@ Full definitions, raw JSON, variance and negative cells:
 
 - [Benchmark report](docs/results/benchmark.md)
 - [Methodology](docs/results/METHODOLOGY.md)
-- [Raw ROCm 7.2.1 matrix](docs/results/matrix/)
+- [ROCm 7.14 matrix (headline)](docs/results/matrix-714/) · [7.2.1 vs 7.14 comparison](docs/results/matrix-714/comparison.md)
+- [Historical ROCm 7.2.1 matrix (supplementary)](docs/results/matrix/) — full 21-cell matrix, vLLM head-to-head, llama-bench
 - [Validation-track index](docs/results/README.md)
 
 ## Why this repository exists
@@ -171,7 +185,7 @@ required manifest, command, logs and results. See
 
 | Configuration | Status |
 |---|---|
-| vLLM BF16 + `TRITON_ATTN` + TP=1 | Validated on `gfx1151` |
+| vLLM BF16 + `TRITON_ATTN` + TP=1 | Validated on the **7.2.1 reference** (deferred on 7.14) |
 | llama.cpp HIP + 17GB/dynamic K-quant | Validated on `gfx1151` |
 | llama.cpp DFlash, c=1 or light c≤4 | Validated; speedup depends on workload |
 | `-md dflash.gguf` without `--spec-type draft-dflash` | Silent no-op; do not use |
@@ -197,7 +211,7 @@ cgroup accounting.
 ## Why this helps AMD AI developers
 
 - Reuse a reviewed CDNA → RDNA adaptation instead of rediscovering it.
-- Choose llama.cpp or vLLM from measured workload and feature tradeoffs.
+- Choose the **llama.cpp/GGUF** path (default, single-user) or the vLLM/BF16 path (ROCm 7.2.1 reference, multi-user/agentic) from measured tradeoffs.
 - See which precision, attention and speculative-decoding combinations worked.
 - Avoid the silent DFlash no-op and high-concurrency pathology.
 - Audit exact model/runtime inputs instead of trusting a version label alone.
@@ -208,15 +222,15 @@ cgroup accounting.
 ## ROCm validation tracks
 
 <!-- BEGIN GENERATED: validation-tracks -->
-- **Validated historical/reference stack:** ROCm 7.2.1 host toolchain plus the
-  recorded TheRock runtime. Existing benchmark JSON is immutable evidence.
-- **ROCm 7.14 gfx1151 track:** the reduced **GGUF/llama.cpp matrix is
-  project-validated** on Ryzen AI MAX+ PRO 395 / Radeon 8060S,
-  17 of 21 planned cells; the four
-  `np=16` cells were intentionally deferred. The BF16/vLLM track was **evaluated and is
-  not pursued** — a rocBLAS BF16-GEMM proxy showed no 7.14 compute gain over 7.2.1,
-  so vLLM/BF16 stays on the ROCm 7.2.1 reference. ROCm 7.14 is not presented as a globally
-  validated replacement for the historical stack. No ROCm 7.2.1 result is relabeled or overwritten.
+- **ROCm 7.14 gfx1151 (recommended default):** the reduced **GGUF/llama.cpp
+  matrix is project-validated** on Ryzen AI MAX+ PRO 395 / Radeon 8060S,
+  17 of 21 planned cells; the four `np=16` cells
+  were deferred. The BF16/vLLM track was **evaluated and is not pursued** (rocBLAS BF16-GEMM
+  proxy: no 7.14 compute gain); vLLM/BF16 stays on the 7.2.1 reference, so ROCm 7.14 is not
+  presented as a globally validated replacement for the historical stack.
+- **ROCm 7.2.1 (historical reference, supplementary):** the full validated stack —
+  the complete benchmark matrix, the vLLM-vs-llama.cpp head-to-head, and llama-bench — is
+  preserved as immutable evidence. No result is relabeled or overwritten.
 <!-- END GENERATED: validation-tracks -->
 
 See [ROCm 7.14 scoped validation](docs/results/rocm-7.14/README.md) and its

@@ -28,6 +28,12 @@ release gates are complete.
   machine-local work-session snapshot.
 - Cross-ROCm comparison output now renders latency in the correct units, fails
   closed on malformed/duplicate cells, and leads with TPOT rather than aggregate tok/s.
+- Reframed **ROCm 7.14.0 as the recommended default** — primary headline + default
+  install/build (`scripts/install-rocm-7.14.sh`, `gguf-quickstart.sh` defaults to
+  `~/rocm-7.14.0`). The llama.cpp/GGUF path is the focus for single-user gfx1151;
+  vLLM/BF16 is demoted to pending (validated on the 7.2.1 reference); 7.2.1 is the
+  supplementary historical reference. `public-claims.json` marks the 7.14 track
+  `recommended: true` (asserted by the consistency checker).
 
 ### Preserved
 
