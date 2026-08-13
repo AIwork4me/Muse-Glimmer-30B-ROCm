@@ -74,12 +74,19 @@ gfx1151 ([ROCm/ROCm#4909][invdev]).
 
 ## chunked-prefill
 
-**Symptom:** the server starts but hangs / stalls under concurrent load.
+**Symptom:** an older or modified stack starts but hangs / stalls under
+concurrent prefill.
 
-**Cause:** chunked prefill hangs on RDNA ([vllm-project/vllm#5013][chunked]).
+**Cause:** earlier RDNA reports implicated chunked prefill
+([vllm-project/vllm#5013][chunked]). This was an important investigation lead,
+not a universal RDNA constraint.
 
-**Fix:** Leave chunked prefill **off** (the default once you do not pass
-`--enable-chunked-prefill`). Its absence is asserted by the banned-flag test.
+**Fix:** the pinned vLLM V1 + `TRITON_ATTN` reference was validated with its
+default-on chunked prefill. Do not disable it preemptively. If a newer stack
+stalls, record the exact commit, backend, prompt length, concurrency, and logs,
+then compare default-on and explicitly disabled behavior as a diagnostic. Treat
+a disable flag as a stack-specific workaround, not part of the validated
+reference.
 
 ## amdsmi
 
@@ -102,9 +109,10 @@ stalls at a few KB/s or never completes; or it dies with
 **Cause:** three compounding issues, in rough order of likelihood on a
 region-locked or slow link:
 
-1. **huggingface.co is slow/blocked from your host.** Set
-   `HF_ENDPOINT=https://hf-mirror.com` (or another mirror). The project's
-   `scripts/02-fetch-model.sh` defaults to it.
+1. **huggingface.co is slow/blocked from your host.** The project defaults to
+   the official endpoint. Set `HF_ENDPOINT=https://hf-mirror.com` (or another
+   endpoint you trust) as an optional regional fallback; the script prints the
+   selected endpoint.
 2. **The mirror does not speed up the weights.** hf-mirror.com proxies the HF API
    and `/resolve` metadata, but LFS blobs 302-redirect to the **same signed
    CloudFront URL** (`us.aws.cdn.hf.co`) either way. So for the *shards* the
@@ -162,10 +170,14 @@ the baseline (e.g., different tokens for the same prompt).
 when both use greedy sampling. A mismatch indicates a bug in the DFlash
 implementation or the harness.
 
-**Fix:** verify with `scripts/check_dflash_equiv.sh`, which runs both engines
-on `17 × 23` and checks that both emit `391`. The validated runs pass this
-check (see [`docs/results/benchmark.md` — Study 1](results/benchmark.md#study-1-dflash-anchor-greedy-batch-1-meta-comparable)).
-If you see a mismatch, file a bug against llama.cpp or the harness.
+**Fix:** run `scripts/check_dflash_equiv.sh`. The current harness compares
+baseline and actual DFlash canonical response messages across all six Study 1 prompts plus the
+original `17 × 23` smoke prompt, and rejects a DFlash server with zero draft
+activity. The recorded historical result covers the arithmetic smoke prompt
+(`391`); the expanded corpus must be run before claiming a 6/6 pass. See
+[`docs/results/benchmark.md` — Study 1](results/benchmark.md#study-1-dflash-anchor).
+If you see a mismatch, preserve both responses and server logs when filing a
+bug.
 
 ## dflash-silent-noop
 
@@ -200,9 +212,9 @@ fallen into this trap.
 > **⚠ Headline pitfall. Do NOT combine DFlash with `-np 16` (high concurrency).
 > It is pathologically slow — >1000× slower per-request than the c=16
 > baseline.** This is documented prominently in
-> [`README.md`](../README.md#best-practices--pitfalls--read-this-before-using-dflash-or-c16),
-> [`docs/results/benchmark.md`](results/benchmark.md#c16--dflash-do-not-use), and
-> [`docs/results/METHODOLOGY.md`](results/METHODOLOGY.md#6-the-c16--dflash-pathology).
+> [`README.md`](../README.md#known-good-and-known-bad),
+> [`docs/results/benchmark.md`](results/benchmark.md#c16-dflash-do-not-use), and
+> [`docs/results/METHODOLOGY.md`](results/METHODOLOGY.md#c16-dflash-pathology).
 
 **Symptom:** a DFlash cell at `-np 16` hangs or appears to make no progress.
 The dynamic c=16 DFlash REPS=5 cell was **aborted after 5 h 16 m** with no
@@ -221,7 +233,7 @@ it saves.
 the `--spec-*` flags) and run the baseline. c=16 baselines are healthy:
 **17gb 34.5 tok/s, dynamic 31.0 tok/s aggregate.** DFlash is a clear win only at
 `c ≤ 4` (best at `c = 1`: ~2.2×). The full best-practice table is in
-[`README.md`](../README.md#best-practices--pitfalls--read-this-before-using-dflash-or-c16).
+[`README.md`](../README.md#known-good-and-known-bad).
 
 > c=16 itself is fine — the pathology is DFlash-specific. Both c=16 DFlash cells
 > are recorded as `pathological: true` evidence-based non-completions in
@@ -241,7 +253,7 @@ in this build path; the drafter still loads and drafts correctly.
 
 **Fix:** none needed — ignore it. The drafter's memory cost shows up in the
 process VmPeak (~+2.5–3 GiB vs baseline), which is the footprint we report. See
-[`docs/results/METHODOLOGY.md §5`](results/METHODOLOGY.md#5-the-memory-methodology--trust-vmpeak-not-rocm-smi-or-vmhwm).
+[`docs/results/METHODOLOGY.md §5`](results/METHODOLOGY.md#memory-methodology).
 
 ## dflash-mmproj-xet
 
@@ -270,8 +282,9 @@ HF_HUB_DISABLE_XET=1 HF_ENDPOINT=https://huggingface.co \
   --local-dir models
 ```
 
-(The big text shards still go through the mirror + parallel range downloader —
-see [model-fetch-slow](#model-fetch-slow).) Manifest of all four artifacts:
+(The big text shards use the selected endpoint plus the parallel range
+downloader; the official endpoint remains the default. See
+[model-fetch-slow](#model-fetch-slow).) Manifest of all four artifacts:
 [`docs/results/matrix/gguf-manifest.md`](results/matrix/gguf-manifest.md).
 
 ## memory-footprint-apu
@@ -287,13 +300,14 @@ unified-host-visible buffers don't increment it. `VmHWM` undercounts because
 mmap'd file pages are paged in/out by the kernel and many GPU-offloaded pages
 don't show as resident.
 
-**Fix:** for the real footprint, read **`VmPeak`** from
-`/proc/<pid>/status` — that sees the full mmap'd model mapping (~24–32 GiB on
-this matrix). This is what every cell JSON and the rendered matrix report; the
-renderer (`scripts/render_matrix.py`) emits VmPeak as the footprint column. See
-[`docs/results/METHODOLOGY.md §5`](results/METHODOLOGY.md#5-the-memory-methodology--trust-vmpeak-not-rocm-smi-or-vmhwm)
-for the full methodology and the cross-checks (drafter +2.7–2.8 GiB ≈ Meta's
-~+3 GB; vision +1.8–1.9 GiB ≈ Meta's ~+2 GB).
+**Fix:** use **`VmPeak`** from `/proc/<pid>/status` as the historical
+process-level mapped-memory envelope for this workload (~24–32 GiB in this
+matrix), not as literal resident physical memory. Every cell JSON and rendered
+matrix labels that metric explicitly. Future runs should add
+`smaps_rollup`/PSS, system `MemAvailable` deltas, cgroup accounting, and
+relevant GTT counters. See
+[`docs/results/METHODOLOGY.md §5`](results/METHODOLOGY.md#memory-methodology)
+for the methodology and empirical deltas.
 
 ## reasoning-length
 

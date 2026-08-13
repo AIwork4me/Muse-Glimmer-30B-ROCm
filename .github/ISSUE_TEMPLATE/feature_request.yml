@@ -1,0 +1,30 @@
+name: Feature or platform request
+description: Propose an inference feature or a new AMD platform track.
+title: "[request] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Developer need
+      description: Describe the workload or missing capability.
+    validations:
+      required: true
+  - type: textarea
+    id: platform
+    attributes:
+      label: Target platform and stack
+      description: GPU/gfx, ROCm, inference engine, precision, and model path if known.
+    validations:
+      required: true
+  - type: textarea
+    id: upstream
+    attributes:
+      label: Upstream references
+      description: Relevant official docs, issues, or pull requests.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Reproducible acceptance criteria
+    validations:
+      required: true

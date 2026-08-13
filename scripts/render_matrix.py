@@ -3,6 +3,7 @@
 import glob
 import json
 import os
+import sys
 
 
 def _row(c, base=None):
@@ -26,7 +27,7 @@ def _row(c, base=None):
 
 
 def _study1(cells):
-    out = ["### Study 1 — DFlash anchor (greedy, batch 1, diverse prompt set) — Meta-comparable\n",
+    out = ["### Study 1 — DFlash anchor (greedy, batch 1, diverse prompt set) — Meta-aligned\n",
            "| weight | mode | tok/s | TTFT p50 (s) | TPOT (s) | footprint VmPeak (GiB) | Speedup | draft acceptance |",
            "|---|---|---|---|---|---|---|---|"]
     for w in ("17gb", "dynamic"):
@@ -38,7 +39,7 @@ def _study1(cells):
 
 
 def _study2(cells):
-    out = ["### Study 2 — Throughput under load (temp 1.0) — NOT Meta-comparable\n",
+    out = ["### Study 2 — Throughput under load (temp 1.0) — original study\n",
            "| weight | np | mode | agg tok/s | TTFT p90 (s) | TPOT med (s) | footprint VmPeak (GiB) | acceptance |",
            "|---|---|---|---|---|---|---|---|"]
     for c in sorted([x for x in cells if x.get("study") == "study2"],
@@ -86,6 +87,10 @@ def render_studies(cells):
 
 
 if __name__ == "__main__":
-    cells = [json.load(open(p)) for p in
-             sorted(glob.glob(os.path.join(os.path.dirname(__file__), "..", "docs", "results", "matrix", "cell-*.json")))]
+    # Optional argv[1] = matrix dir (default: the committed 7.2.1 matrix). Lets the
+    # 7.14.0 run render its own matrix-714/ without touching the 7.2.1 matrix.md.
+    here = os.path.dirname(__file__)
+    mdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "..", "docs", "results", "matrix")
+    mdir = os.path.abspath(mdir)
+    cells = [json.load(open(p)) for p in sorted(glob.glob(os.path.join(mdir, "cell-*.json")))]
     print(render_studies(cells))

@@ -1,32 +1,50 @@
-# Adaptation: MI300X recipe → gfx1151 (Strix Halo)
+# CDNA → RDNA adaptation map
 
-> The educational centerpiece of this project. Every row below is a deliberate
-> delta from Meta's upstream vLLM recipe ([vllm-project/recipes#776][recipe]),
-> which targets CDNA datacenter GPUs (MI300X = gfx942, MI355X = gfx942/950).
-> We retarget it to **gfx1151** — AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S
-> "Strix Halo", an RDNA 3.5 APU — and explain *why* each change is required.
+> This is not a collection of random workarounds. It is the engineering map
+> from Meta's upstream MI300X/MI355X recipe to the validated `gfx1151` stack.
 
-The model is **Muse-Glimmer-30B** (`meta-models/Muse-Glimmer-30B`), a dense
-29.6B vision-language model with a new Meta architecture
-(`MuseGlimmerForConditionalGeneration`, `model_type: muse_glimmer`) — not
-GPT-OSS, not Llama. Its vLLM support ([vllm-project/vllm#51655][pr]) lives in no
-released wheel, which is the root reason for most of the deltas below.
+The upstream [vLLM recipes PR #776][recipe] is the CDNA reference and was merged
+on 2026-08-10. The model-support [vLLM PR #51655][pr] remains open as of
+2026-08-13, so this repository pins its source commit rather than implying
+released-package support.
 
-## The delta table
+The target validated here is Muse-Glimmer-30B on AMD Ryzen AI MAX+ PRO 395 /
+Radeon 8060S (`gfx1151`, RDNA 3.5). Other Radeon platforms stay pending until
+they submit equivalent evidence.
 
-| Aspect | MI300X recipe (PR #776) | **gfx1151 adaptation** | Why (verified) |
-|---|---|---|---|
-| vLLM | 0.27.0+ / nightly, PR #51655 | same | `muse_glimmer` model code + parsers are in **no released wheel** |
-| Install | docker `vllm/vllm-openai-rocm:nightly` | **source build**, PR #51655 pinned commit, `PYTORCH_ROCM_ARCH=gfx1151` + `import amdsmi` shim | AMD: Ryzen APUs are pip/source-only; **no gfx1151 docker**; prebuilt images throw `invalid device function` ([ROCm/ROCm#4909][invdev]) |
-| PyTorch | (in image) | **TheRock gfx1151 nightly** wheel, py3.12, numpy<2 | stock ROCm wheels lack gfx1151 codegen |
-| Precision | bf16 (72 GB) / fp8_block (40 GB) | **bf16 only** | FP8 matrix units are RDNA4/CDNA3+; vLLM FP8 won't run on gfx1151 |
-| Attention backend | `--attention-backend ROCM_AITER_FA` | **`TRITON_ATTN`** (Triton kernels; `FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE`) | AITER is hard-gated to CDNA3+/RDNA4 ([vllm-project/vllm#51136][aiter]); `FLASH_ATTN` *also* fails here — it asserts "FlashAttention version not detected" (no flash-attn codegen for gfx1151) |
-| Env | `VLLM_ROCM_USE_AITER=1` | **not set** (auto-disables) | same AITER gate |
-| Tensor-parallel | `--tensor-parallel-size 4` | **TP=1** | single integrated GPU |
-| Chunked prefill | (default on) | **default-on** (validated) | the historical RDNA hang ([vllm-project/vllm#5013][chunked]) did **not** reproduce on this build with `TRITON_ATTN` |
-| KV-cache dtype | bf16 | bf16 (no fp8 KV) | fp8 KV is CDNA-only |
-| Spec-decoding | DFlash (`Muse-Glimmer-30B-assistant`) | **validated on llama.cpp** (vLLM still blocked) | llama.cpp path: **2.20× (17gb) / 2.39× (dynamic)** at greedy batch 1, draft acceptance 0.233 / 0.237, byte-identical output — see [`docs/results/benchmark.md`](results/benchmark.md#study-1--dflash-anchor-greedy-batch-1--meta-comparable). vLLM path still blocked by the registry bug (`DFlashMuseGlimmer…`). **Caveat: do NOT combine DFlash with `-np 16` — pathological (>1000× slower per-request); c=16 baseline is fine. Always pass `--spec-type draft-dflash --spec-draft-n-max 16` or DFlash silently no-ops.** |
-| Kernel | — | **≥ 6.16.9** (have 6.17) | fixes the "ROCm sees only ~15.5 GB" UMA bug ([ROCm/ROCm#5444][uma]) |
+## Classification
+
+- **Required by RDNA architecture** — follows from hardware capabilities or
+  topology and is expected to remain relevant.
+- **ROCm-version-specific** — tied to a host/runtime/compiler version.
+- **Temporary upstream limitation** — should be revisited when upstream lands
+  or publishes support.
+- **Validated workaround** — required on the recorded stack and supported by
+  local evidence.
+- **Historical workaround** — previously suspected or required, but not needed
+  on the recorded stack; retained to prevent stale advice from returning.
+- **Hardware-specific workaround** — observed on `gfx1151`; do not generalize
+  to all RDNA without evidence.
+
+## Delta table
+
+| Area | Upstream MI-series behavior | Validated `gfx1151` behavior | Reason and evidence | Classification |
+|---|---|---|---|---|
+| vLLM model support | Recipe depends on Muse-Glimmer support | Source build at commit `606a12cd701875012ffe78a54afd29f97b825dba` | PR #51655 is still open; the commit contains model, processor and parser work used here | **Temporary upstream limitation** |
+| Packaging | ROCm vLLM recipe/image | Compile from source with `PYTORCH_ROCM_ARCH=gfx1151` | Prebuilt code without the target can fail with `invalid device function` ([ROCm #4909][invdev]) | **Hardware-specific workaround** |
+| PyTorch/runtime | Runtime supplied by MI-oriented stack | TheRock gfx1151 PyTorch `2.10.0+rocm7.13.0a20260513`, Python 3.12 | The recorded wheel contains the required target code; exact packages are locked | **ROCm-version-specific** |
+| Build toolchain | Cohesive image toolchain/runtime | Host ROCm 7.2.1 development toolchain + TheRock runtime packages | The wheel bundle lacks the complete CMake development surface needed by the vLLM build | **Validated workaround** |
+| vLLM compatibility patches | Newer upstream PyTorch API expectations | Apply the committed torch-2.10 and import-order patches | Patch files are reviewable and pinned to the vLLM commit | **Validated workaround** |
+| Precision | BF16 and supported FP8 recipe variants | BF16 for vLLM; Meta K-quant for llama.cpp | The recorded `gfx1151` vLLM stack has no validated FP8 path | **Required by RDNA architecture** for this generation/stack |
+| Attention | `ROCM_AITER_FA` in the MI recipe | `TRITON_ATTN`; `FLASH_ATTN` and AITER not used | AITER is gated away from this target ([vLLM #51136][aiter]); `FLASH_ATTN` failed startup because the library build lacked gfx1151 support | **Required by RDNA architecture** + **validated backend** |
+| Tensor parallel | TP1/TP2 validated upstream on MI300X/MI355X | TP=1 | Strix Halo exposes one integrated GPU | **Required by hardware topology** |
+| KV cache | BF16 and platform-supported variants | BF16 | No FP8 KV claim is made for this stack | **Required by validated precision path** |
+| Chunked prefill | vLLM V1 default | Default-on on the pinned build; no explicit flag | A historical RDNA hang report exists ([vLLM #5013][chunked]), but it did not reproduce with the pinned `TRITON_ATTN` stack | **Historical workaround** |
+| DFlash in vLLM | Model work includes DFlash support | Disabled on the vLLM path | The recorded run hit a draft-model registry problem; no fixed upstream status is claimed | **Temporary upstream limitation** |
+| DFlash in llama.cpp | Separate engine, not the MI recipe | Validated at c=1/c=4 with explicit `--spec-type draft-dflash` | Raw cells show 2.20×/2.39× at Study 1; omitting `--spec-type` silently disables drafting | **Validated workaround** |
+| DFlash at c=16 | No published comparable upstream cell | Do not use | Two negative cells record collapse/non-completion, including a 5 h 16 m aborted run | **Hardware/workload-specific negative finding** |
+| Kernel | Not specified by the MI recipe | Linux ≥ 6.16.9 | Older kernels expose only ~15.5 GiB of the unified pool on this host class ([ROCm #5444][uma]) | **ROCm-version-specific** |
+| Memory accounting | Dedicated HBM tools are meaningful | Record VmPeak, VmHWM/RSS and VRAM counters together | Unified-memory mmap/offload makes any one counter incomplete | **Hardware-specific measurement adaptation** |
 
 [recipe]: https://github.com/vllm-project/recipes/pull/776
 [pr]: https://github.com/vllm-project/vllm/pull/51655
@@ -35,91 +53,109 @@ released wheel, which is the root reason for most of the deltas below.
 [chunked]: https://github.com/vllm-project/vllm/issues/5013
 [uma]: https://github.com/ROCm/ROCm/issues/5444
 
-## Why each row — in prose
+## Packaging and runtime layers
 
-**vLLM / Install — source build, not docker.** The model's architecture and its
-`muse_glimmer` reasoning/tool-call parsers exist only on the PR #51655 branch,
-which has not landed in a release or a nightly docker tag. Worse, every prebuilt
-ROCm docker image is codegen'd for CDNA targets; on gfx1151 it throws
-`invalid device function` the moment a HIP kernel runs. So we build vLLM from
-source (`scripts/01-build-vllm.sh`) with `PYTORCH_ROCM_ARCH=gfx1151`, into the uv
-venv, and apply an `import amdsmi`-before-torch shim
-(`patches/vllm-amdsmi-import.diff`) that prevents an import-time crash on this
-APU. The pin: `xianbaoqian/vllm` @ `606a12cd` (branch `tiezhen/new-model-support`).
+“ROCm 7.2.1” alone does not describe the environment. The validated stack is
+hybrid:
 
-**PyTorch — TheRock gfx1151 wheel.** The stock `torch` ROCm wheels are built for
-gfx9xx/gfx11-generic and contain no gfx1151 kernels. AMD's **TheRock** project
-publishes gfx1151-codegen'd nightlies at
-`https://rocm.nightlies.amd.com/v2/gfx1151/`; `pyproject.toml` pins
-`torch==2.10.0+rocm7.13.0a20260513` from that index. Python must be **3.12**
-(the gfx1151 wheels fail to import on 3.13) and **numpy<2**.
+1. The host ROCm 7.2.1 installation supplies `hipcc`, headers and the complete
+   CMake development packages.
+2. AMD TheRock packages supply a gfx1151-targeted PyTorch/runtime line.
+3. vLLM is built at the recorded PR commit for `gfx1151`.
+4. At runtime, the loaded PyTorch ROCm libraries satisfy the vLLM extension's
+   ROCm 7 ABI dependencies.
 
-**Precision — BF16 only.** RDNA 3.5 has no usable FP8 path in vLLM. The model's
-weights ship BF16 (~59 GB), and that is what we run — see the memory math below.
+The authoritative values are in
+[`configs/validated-stack.json`](../configs/validated-stack.json). This layout
+is a validated workaround, not a general recommendation to mix arbitrary ROCm
+versions.
 
-**Attention — `TRITON_ATTN`, never AITER (and not `FLASH_ATTN`).** AITER (AMD's
-tuned attention/decoder kernels) is gated behind `get_cdna_version() > 2`,
-i.e. CDNA3+ / RDNA4 only — on gfx1151 it is silently absent. The plan expected
-`FLASH_ATTN` (with `FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE`) to work, but the
-first real boot validated otherwise: this build logs `Using FlashAttention
-version None` and the profiling forward pass asserts `FlashAttention version
-not detected` — there is no flash-attn library codegen for RDNA 3.5.
-**`TRITON_ATTN`** (pure Triton attention kernels, via the ROCm-patched Triton
-from TheRock) is the working backend on gfx1151 and what
-`configs/serve-args.conf` pins. (Switching to it was the single change that
-took the server from crash-on-startup to serving.)
+Two committed vLLM patches make the build auditable:
 
-**Tensor-parallel = 1.** Strix Halo is one integrated GPU sharing unified
-memory; there is nothing to shard across.
+- `patches/vllm-torch210-compat.diff` adapts API differences between the pinned
+  PyTorch stable C++ surface and the newer vLLM source.
+- `patches/vllm-amdsmi-import.diff` imports `amdsmi` before torch, which
+  avoided the observed `gfx1151` startup failure.
 
-**Chunked prefill on (default).** vLLM V1 defaults this on; the historical RDNA
-hang ([vllm-project/vllm#5013][chunked]) did **not** reproduce here with
-`TRITON_ATTN`, so we leave the default for throughput. We never pass the flag —
-V1's default-on is enough — so the banned-flag test still passes.
+## Attention and precision
 
-**Speculative decoding — validated on llama.cpp, still blocked on vLLM.** The
-DFlash assistant model hits a registry bug in vLLM
-(`DFlashMuseGlimmerAssistant`), so the **vLLM path** keeps DFlash off. But the
-**llama.cpp path** runs DFlash cleanly and delivers a measured **2.20× speedup
-on 17gb (23.03 vs 10.48 tok/s) and 2.39× on dynamic (21.82 vs 9.14 tok/s)** at
-greedy batch 1, with draft acceptance 0.233 / 0.237 and **byte-identical output**
-under greedy spec-decode. gfx1151 lands between Meta's M5 Max (1.8×) and RTX 5090
-(3.1×) — see [`docs/results/benchmark.md`](results/benchmark.md#study-1--dflash-anchor-greedy-batch-1--meta-comparable).
+The MI recipe's AITER choice cannot be copied mechanically. On this target AITER
+is unavailable, and forcing its environment switch is not a performance tweak;
+it selects an unsupported path. The initial `FLASH_ATTN` attempt also failed
+during the first profiling forward pass because the required target build was
+absent. `TRITON_ATTN` is the backend that booted and served on the validated
+stack.
 
-Two operational gotchas (documented in
-[`docs/troubleshooting.md`](troubleshooting.md)):
+The precision decision is similarly evidence-bounded. BF16 is the validated
+vLLM path. The repository does not convert “RDNA can support some low-precision
+operations” into an unsupported claim that this exact FP8 model/KV/backend stack
+works.
 
-1. **DFlash is a silent no-op without `--spec-type draft-dflash`.** `llama-server`'s
-   `--spec-type` defaults to `none`, so `-md dflash.gguf -ngld 99` alone loads the
-   drafter but never drafts (1.0×). Always pass `--spec-type draft-dflash
-   --spec-draft-n-max 16` (n_max=16 is the measured sweet spot = DFlash block_size).
-2. **Do NOT combine DFlash with `-np 16`.** It is pathologically slow — >1000×
-   slower per-request than the c=16 baseline (a 16×48 batch completed 0 of 768
-   tokens in 28 s; the dynamic REPS=5 cell was aborted after 5 h 16 m at 0.18 %
-   acceptance). c=16 baseline is fine (31–34 tok/s); the pathology is
-   DFlash-specific. Best practice: DFlash on for c ≤ 4, off for c ≥ 8.
+## Chunked prefill: keep the negative history accurate
 
-**Kernel ≥ 6.16.9.** Older kernels expose only ~15.5 GB of the unified pool to
-ROCm (a KFD/HSA UMA-handling bug). 6.16.9 fixes it; this host runs 6.17.
+An older RDNA issue led to an early plan to disable chunked prefill. On the
+pinned vLLM V1 + `TRITON_ATTN` stack, default-on chunked prefill did not
+reproduce that hang. Therefore the current serve configuration does not pass
+either an enable or disable flag.
 
-## Memory math (BF16)
+This is a **historical workaround**, not a current requirement. If a future
+stack hangs, record the exact versions and workload before changing the shared
+default.
 
+## DFlash: engine split and failure modes
+
+The recorded vLLM path did not complete DFlash enablement because its draft model
+hit a registry limitation. The llama.cpp path did:
+
+- 17GB Study 1: 10.48 → 23.03 tok/s (2.20×).
+- Dynamic Study 1: 9.14 → 21.82 tok/s (2.39×).
+- Draft acceptance is recorded in raw JSON.
+- The original arithmetic greedy-equivalence smoke passed.
+
+Two negative findings are part of the reference:
+
+1. `-md dflash-kquant.gguf` alone loads the draft model but does not draft.
+   `--spec-type draft-dflash --spec-draft-n-max 16` is required.
+2. At `-np 16`, DFlash became pathological. The 17GB probe completed no
+   requested tokens in 27.7 seconds; the dynamic full cell was stopped after
+   5 h 16 m with 0.18% acceptance. Baseline c=16 remained healthy.
+
+These findings are workload- and implementation-specific; they are not claims
+that speculative decoding is generally unsuitable for RDNA.
+
+## Kernel and unified memory
+
+The minimum kernel is **6.16.9**, including the patch component. The environment
+checker uses numeric major/minor/patch comparison:
+
+```text
+6.16.8  FAIL
+6.16.9  PASS
+6.17.0  PASS
+7.0.0   PASS
 ```
-weights        ~59.2 GB            (two safetensors shards, 50 + 9.6 GB)
-KV @ 128K       ~7   GB            (2(K+V) × 2 kv-heads × 128 × 52 layers × 2 B
-                                    ≈ 52 KiB/token × 131072)
-activations     ~2–4 GB
-─────────────────────────────
-total          ~68   GB            fits in 94 GB unified with ~20 GB headroom
-                                   for concurrency  →  --gpu-memory-utilization 0.90
+
+The 60 GiB GPU-visible pool threshold is a **hard requirement for the validated
+BF16 vLLM configuration**. The default GGUF itself needs materially less, but
+`00-check-env.sh` certifies the full reference host rather than only model-file
+fit.
+
+Approximate BF16 planning math, preserved from the validated work:
+
+```text
+weights       ~59.6 GB on disk (exact shard bytes are in the artifact manifest)
+KV @ 128K      ~7 GB
+activations    ~2–4 GB
+total          ~68 GB, workload-dependent
 ```
 
-## Closest precedent (verbatim)
+These estimates are planning values, not new measurements.
 
-PR #51655 comment by *BlivionIaG* (2026-08-10):
+## Evidence rules
 
-> *"I have dflash working with the authors pr on their fork … got it working on
-> two gfx1100 cards. Running on rdna3 (rocm 7.2.0, pytorch 2.12, kernel 6.8.0)."*
-
-This confirms the model runs on consumer RDNA silicon with our stack family
-(gfx1100 ≈ RDNA3; we are one generation newer on gfx1151 / RDNA 3.5).
+- A raw cell, log or committed test result outranks an assumption.
+- “Works on `gfx1151`” does not become “works on Radeon.”
+- An upstream recipe is labeled upstream evidence, not local validation.
+- Workarounds remain attached to their version and hardware scope.
+- **Negative results are results.** Failed backends, silent no-ops and aborted
+  cells remain visible so the next developer does not repeat them.

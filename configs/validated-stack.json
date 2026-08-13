@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "status": "validated-historical-reference",
+  "validated_on": "2026-08-13",
+  "platform": {
+    "hardware": "AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S",
+    "gpu_arch": "gfx1151",
+    "architecture_family": "RDNA 3.5",
+    "compute_units": 40,
+    "memory": "94 GiB unified LPDDR5X"
+  },
+  "host": {
+    "minimum_kernel": "6.16.9",
+    "observed_benchmark_kernels": ["6.17.0-1020-oem", "6.17.0-1032-oem"],
+    "rocm_toolchain": "7.2.1",
+    "gpu_visible_memory_min_gib": 60,
+    "gpu_visible_memory_policy": "hard requirement for the validated BF16 vLLM path"
+  },
+  "python": {"version": "3.12"},
+  "pytorch": {
+    "source": "AMD TheRock gfx1151 index",
+    "version": "2.10.0+rocm7.13.0a20260513",
+    "torchvision": "0.25.0+rocm7.13.0a20260513",
+    "runtime_rocm_line": "7.13.0a20260513"
+  },
+  "vllm": {
+    "source_repo": "https://github.com/xianbaoqian/vllm.git",
+    "upstream_pr": "https://github.com/vllm-project/vllm/pull/51655",
+    "commit": "606a12cd701875012ffe78a54afd29f97b825dba",
+    "build_arch": "gfx1151",
+    "patches": ["patches/vllm-amdsmi-import.diff", "patches/vllm-torch210-compat.diff"]
+  },
+  "llama_cpp": {
+    "source_repo": "https://github.com/ggml-org/llama.cpp.git",
+    "commit": "0b1bad14ff204627636aeb1de22ddcd5acb859d4",
+    "build_arch": "gfx1151"
+  },
+  "model": {
+    "bf16_id": "meta-models/Muse-Glimmer-30B",
+    "bf16_revision": "97c77dff50b2797bcc558fa2d909761dbc575c59",
+    "gguf_id": "meta-models/Muse-Glimmer-30B-GGUF",
+    "gguf_revision": "a0532f7263ee67f1e0a5f5c5fdcd50dd62fc9aa4",
+    "artifact_manifest": "configs/artifact-manifest.json"
+  },
+  "inference": {
+    "vllm_precision": "bfloat16",
+    "vllm_attention_backend": "TRITON_ATTN",
+    "vllm_tensor_parallel_size": 1,
+    "llama_cpp_backend": "HIP"
+  },
+  "benchmark_evidence": {
+    "rocm_7_2_1_matrix": "docs/results/matrix/",
+    "methodology": "docs/results/METHODOLOGY.md",
+    "rocm_7_14_status": "pending"
+  }
+}

@@ -41,6 +41,9 @@ for ST in "${STUDIES[@]}"; do
   . "$CONF"
   count=0
   for W in $WEIGHTS; do for D in $DFS; do for N in $NPS; do
+    # EXCLUDE_NPS (space-separated) lets a run skip concurrency levels — used by
+    # the ROCm 7.14.0 first pass to defer c=16 (hard-freeze risk #6165). Empty = no skip.
+    case " ${EXCLUDE_NPS:-} " in *" $N "*) continue;; esac
     if [ "$ST" = "study3" ] && [ "$D" = "1" ] && { [ "$W" != "17gb" ] || [ "$N" != "1" ]; }; then
       continue
     fi
@@ -85,7 +88,10 @@ while read -r ST W D V N CONF; do
 done < "$ORDER_FILE"
 
 # --- Render the markdown report -------------------------------------------
-# render_matrix.py globs docs/results/matrix/cell-*.json and prints markdown.
-mkdir -p docs/results/matrix
-uv run --no-sync python scripts/render_matrix.py > docs/results/matrix/matrix.md
-echo "rendered docs/results/matrix/matrix.md"
+# render_matrix.py renders the cells in MATRIX_OUTDIR (default: the 7.2.1 matrix).
+# The 7.14.0 run sets MATRIX_OUTDIR=docs/results/matrix-714 so the 7.2.1
+# docs/results/matrix/matrix.md is never touched.
+MATRIX_DIR="${MATRIX_OUTDIR:-docs/results/matrix}"
+mkdir -p "$MATRIX_DIR"
+uv run --no-sync python scripts/render_matrix.py "$MATRIX_DIR" > "$MATRIX_DIR/matrix.md"
+echo "rendered $MATRIX_DIR/matrix.md"

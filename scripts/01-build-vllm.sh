@@ -3,17 +3,34 @@
 # uv venv. Idempotent: re-runs clone+shim+build. Control parallelism via MAX_JOBS.
 set -euo pipefail
 
-# --- Pinned Muse-Glimmer vLLM support (PR #51655). -------------------------
-# Resolved via the GitHub REST API (no `gh` available on this host):
-#   curl -s https://api.github.com/repos/vllm-project/vllm/pulls/51655
-# PR head lives on the xianbaoqian/vllm fork, branch tiezhen/new-model-support.
-# Update only after re-validation against gfx1151.
-VLLM_REPO="${VLLM_REPO:-https://github.com/xianbaoqian/vllm.git}"
-VLLM_REF="${VLLM_REF:-606a12cd701875012ffe78a54afd29f97b825dba}"
-SRC="third_party/vllm"
-
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+# --- Pinned Muse-Glimmer vLLM support (PR #51655). -------------------------
+# Defaults come from the validated stack manifest. Overrides are intentionally
+# supported for upstream experiments, but they no longer reproduce the
+# published reference stack.
+mapfile -t STACK_VLLM < <(python3 - "$ROOT/configs/validated-stack.json" <<'PY_STACK'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+print(data["vllm"]["source_repo"])
+print(data["vllm"]["commit"])
+PY_STACK
+)
+VALIDATED_VLLM_REPO="${STACK_VLLM[0]}"
+VALIDATED_VLLM_REF="${STACK_VLLM[1]}"
+VLLM_REPO="${VLLM_REPO:-$VALIDATED_VLLM_REPO}"
+VLLM_REF="${VLLM_REF:-$VALIDATED_VLLM_REF}"
+SRC="${VLLM_SRC:-third_party/vllm}"
+
+if [ "$VLLM_REPO" = "$VALIDATED_VLLM_REPO" ] && [ "$VLLM_REF" = "$VALIDATED_VLLM_REF" ]; then
+  echo "vLLM source: validated reference"
+else
+  echo "vLLM source: EXPERIMENTAL override (published benchmark claims do not apply)"
+fi
+echo "  repo: $VLLM_REPO"
+echo "  ref:  $VLLM_REF"
 
 # uv lives in ~/.local/bin on this host.
 export PATH="$HOME/.local/bin:$PATH"
@@ -66,17 +83,51 @@ hipcc --version | sed 's/^/  hipcc> /' | head -3
 echo "=== Installing build backend deps (no-build-isolation needs them in-env) ==="
 uv pip install "setuptools-scm>=8.0" "cmake>=3.26.1" "ninja" "wheel" "setuptools-rust>=1.9.0"
 
-# --- Clone the pinned PR head ------------------------------------------------
-echo "=== Cloning vLLM @ $VLLM_REF ==="
-rm -rf "$SRC"
-mkdir -p third_party
-git clone --depth 1 "$VLLM_REPO" "$SRC"
-git -C "$SRC" fetch --depth 1 origin "$VLLM_REF"
-git -C "$SRC" checkout "$VLLM_REF"
+# --- Fetch or reuse the pinned source safely ---------------------------------
+# Never delete an existing checkout: it may contain developer work. A checkout
+# at another commit must be clean before this script changes HEAD.
+mkdir -p "$(dirname "$SRC")"
+if [ -e "$SRC" ] && [ ! -d "$SRC/.git" ]; then
+  echo "ERROR: $SRC exists but is not a git checkout; choose VLLM_SRC or move it." >&2
+  exit 1
+fi
+if [ ! -d "$SRC/.git" ]; then
+  echo "=== Cloning vLLM @ $VLLM_REF ==="
+  git clone --depth 1 "$VLLM_REPO" "$SRC"
+fi
+
+CURRENT_REF="$(git -C "$SRC" rev-parse HEAD 2>/dev/null || true)"
+if [ "$CURRENT_REF" != "$VLLM_REF" ]; then
+  if ! git -C "$SRC" diff --quiet --ignore-submodules HEAD -- ||
+     ! git -C "$SRC" diff --cached --quiet; then
+    echo "ERROR: $SRC has tracked changes at $CURRENT_REF; use a clean VLLM_SRC for another ref." >&2
+    exit 1
+  fi
+  git -C "$SRC" fetch --depth 1 "$VLLM_REPO" "$VLLM_REF"
+  git -C "$SRC" checkout --detach FETCH_HEAD
+else
+  echo "  checkout already at validated commit; no fetch needed"
+fi
+ACTUAL_REF="$(git -C "$SRC" rev-parse HEAD)"
+if [[ "$VLLM_REF" =~ ^[0-9a-fA-F]{40}$ ]] && [ "$ACTUAL_REF" != "$VLLM_REF" ]; then
+  echo "ERROR: requested $VLLM_REF but checked out $ACTUAL_REF" >&2
+  exit 1
+fi
 echo "  HEAD: $(git -C "$SRC" log --oneline -1)"
 
-# --- Source patches (applied to the cloned tree; diffs are committed in
-#     patches/ for review and re-applied here for reproducibility) ------------
+# --- Source patches (committed in patches/ and applied idempotently) ---------
+apply_pinned_patch() {
+  local patch="$1"
+  if git -C "$SRC" apply --check "$patch"; then
+    git -C "$SRC" apply "$patch"
+    echo "  applied $(basename "$patch")"
+  elif git -C "$SRC" apply --reverse --check "$patch"; then
+    echo "  already applied $(basename "$patch")"
+  else
+    echo "ERROR: $(basename "$patch") neither applies nor matches the source tree." >&2
+    exit 1
+  fi
+}
 
 # Patch 1: torch 2.10 vs vLLM-2.13-era stable C++ API. The TheRock gfx1151
 # index tops out at torch 2.10.0, but PR #51655 rides recent vLLM main that
@@ -86,26 +137,24 @@ echo "  HEAD: $(git -C "$SRC" log --oneline -1)"
 # deleter (its UVA cleanup path is unused by muse_glimmer inference). All
 # other torch::stable call sites already match the 2.10 signature.
 TORCH_PATCH="$ROOT/patches/vllm-torch210-compat.diff"
-if [ -f "$TORCH_PATCH" ]; then
-  echo "  applying torch-2.10 compat patch"
-  git -C "$SRC" apply "$TORCH_PATCH"
-else
-  echo "  WARNING: $TORCH_PATCH missing — torch 2.10 build will fail on cuda_view.cu"
-fi
+AMDSMI_PATCH="$ROOT/patches/vllm-amdsmi-import.diff"
+for patch in "$TORCH_PATCH" "$AMDSMI_PATCH"; do
+  if [ ! -f "$patch" ]; then
+    echo "ERROR: required patch missing: $patch" >&2
+    exit 1
+  fi
+  apply_pinned_patch "$patch"
+done
 
-# Patch 2: amdsmi-before-torch shim (gfx1151 workaround). vLLM already imports
-# amdsmi lazily in platforms/__init__.py, but on gfx1151 the first ROCm init
-# must happen before torch grabs the device. The shim prepends `import amdsmi`
-# to vllm/__init__.py.
-INIT="$SRC/vllm/__init__.py"
-if ! grep -q "import amdsmi" "$INIT"; then
-  sed -i '1i import amdsmi  # gfx1151 workaround (see docs/troubleshooting.md#amdsmi)' "$INIT"
+# Fail if tracked modifications extend beyond the two documented patches.
+mapfile -t PATCHED_FILES < <(git -C "$SRC" diff --name-only)
+EXPECTED_FILES=("csrc/libtorch_stable/cuda_view.cu" "vllm/__init__.py")
+if [ "${PATCHED_FILES[*]}" != "${EXPECTED_FILES[*]}" ] ||
+   ! git -C "$SRC" diff --cached --quiet; then
+  echo "ERROR: $SRC contains tracked changes beyond the two validated patches:" >&2
+  git -C "$SRC" status --short >&2
+  exit 1
 fi
-
-# Regenerate both diffs from the patched tree (idempotency check against the
-# committed copies). The amdsmi diff is the brief's required artifact.
-git -C "$SRC" diff -- vllm/__init__.py > "$ROOT/patches/vllm-amdsmi-import.diff"
-git -C "$SRC" diff -- csrc/libtorch_stable/cuda_view.cu > "$ROOT/patches/vllm-torch210-compat.diff"
 echo "  patches: $(git -C "$SRC" diff --stat | tail -1)"
 
 # --- Build (editable, no isolation so the build sees installed torch+ROCm) ---

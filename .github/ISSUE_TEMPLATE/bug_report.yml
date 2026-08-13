@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a reproducible correctness or runtime problem.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Symptom and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware
+      description: GPU/APU, gfx target, VRAM or unified memory.
+    validations:
+      required: true
+  - type: textarea
+    id: stack
+    attributes:
+      label: Software stack
+      description: Kernel, ROCm, Python, PyTorch, source commits, model revision, backend, and precision.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Redact credentials and personal data.
+      render: shell
+  - type: textarea
+    id: attempts
+    attributes:
+      label: Workarounds or negative findings

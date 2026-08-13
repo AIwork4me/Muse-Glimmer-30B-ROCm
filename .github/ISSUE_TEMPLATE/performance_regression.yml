@@ -1,0 +1,36 @@
+name: Performance regression
+description: Compare a reproducible baseline and new stack.
+title: "[regression] "
+labels: ["performance"]
+body:
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware and fixed environment
+      description: GPU/gfx, memory, kernel, thermals, and other relevant controls.
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Baseline stack and command
+      description: Include commits, model revision, backend, precision, workload, warmup, and repetitions.
+    validations:
+      required: true
+  - type: textarea
+    id: candidate
+    attributes:
+      label: New stack and command
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Raw results
+      description: Throughput, TTFT/TPOT, memory methodology, variance, and artifact links.
+    validations:
+      required: true
+  - type: textarea
+    id: analysis
+    attributes:
+      label: Suspected cause and profiling evidence

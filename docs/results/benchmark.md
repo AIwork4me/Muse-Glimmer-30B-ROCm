@@ -3,9 +3,10 @@
 > Reproduce: start a server (`scripts/03-serve-vllm.sh` or
 > `scripts/gguf-quickstart.sh`), then `BASE=http://127.0.0.1:<port> bash
 > scripts/benchmark.sh`. Raw JSON lands in `docs/results/*.json` (gitignored
-> runtime artifacts); the numbers below are the validated reference runs. Same
-> harness, same prompt, same 512 output tokens, same concurrencies for both
-> engines — an apples-to-apples GPU-vs-GPU comparison.
+> runtime artifacts); the numbers below are the validated reference runs. The
+> head-to-head uses a controlled workload and matching concurrency, but precision,
+> engine, scheduler, and model format differ; treat it as a practical
+> workload-aligned comparison, not an architecture-normalized result.
 
 ## Head-to-head: vLLM (BF16) vs llama.cpp (Q4 K-quant)
 
@@ -76,6 +77,11 @@ degradation on agentic tasks" for the K-quant).
 
 ## Environment manifest
 
+The authoritative machine-readable stack is
+[`configs/validated-stack.json`](../../configs/validated-stack.json); artifact
+digests and revisions are in
+[`configs/artifact-manifest.json`](../../configs/artifact-manifest.json).
+
 | Item | Value |
 |---|---|
 | GPU | AMD Radeon 8060S, **gfx1151** (RDNA 3.5), 40 CUs |
@@ -84,7 +90,7 @@ degradation on agentic tasks" for the K-quant).
 | Kernel | 6.17.0-1020-oem |
 | PyTorch | 2.10.0+rocm7.13.0a20260513 (TheRock gfx1151) |
 | vLLM | 0.1.dev1+g606a12cd7 (source-built, PR #51655) |
-| llama.cpp | v1 (0b1bad1), HIP build, `-DAMDGPU_TARGETS=gfx1151` |
+| llama.cpp | v1 (`0b1bad14ff204627636aeb1de22ddcd5acb859d4`), HIP build, `-DAMDGPU_TARGETS=gfx1151` |
 | GGUF | meta-models/Muse-Glimmer-30B-GGUF `muse-glimmer-30B-kquant-17gb.gguf` (15.6 GiB) |
 
 **vLLM memory at startup** (vLLM's own accounting): 56.49 GiB weights + 1.89 GiB
@@ -96,11 +102,13 @@ unified pool.
 - **Reasoning model**: `/v1/completions` throughput measures raw decode speed; a
   real chat turn emits chain-of-thought first, so end-to-end per-turn latency is
   higher than `512 tok / tok_s`.
-- **`rocm-smi` VRAM is not the real footprint on Strix Halo**: it reports only
-  the ~32 GiB dedicated carve-out (and ~1 GiB "used" — misleading). On the APU's
-  unified memory, llama.cpp's GPU buffers don't increment the carve-out counter;
-  trust vLLM's startup accounting above. (We confirmed llama.cpp is GPU-bound, not
-  CPU: aggregate CPU during generation was ~8% across 32 cores.)
+- **`rocm-smi` VRAM is not a complete memory measurement on Strix Halo**:
+  it reports only the ~32 GiB dedicated carve-out (and ~1 GiB "used" here).
+  llama.cpp's mmap and GPU-offload mappings do not increment that counter. The
+  vLLM startup accounting and explicitly labeled VmPeak envelope below are the
+  available historical evidence; neither is a direct resident-DRAM measurement.
+  (llama.cpp was GPU-bound: aggregate CPU during generation was ~8% across 32
+  cores.)
 - **llama.cpp slot tuning**: the default 4 slots cap concurrent throughput at
   ~22 tok/s; pass `-np <slots>` (and enough `-c` per slot) to scale.
 
@@ -125,8 +133,10 @@ process with its exact flags recorded in the cell JSON.
 > `--spec-type draft-dflash --spec-draft-n-max 16`. `n_max=16` is the measured
 > sweet spot (it equals the DFlash block_size); n_max `3 / 8 / 16 / 32` →
 > 1.14× / 1.51× / 1.60× / 1.60×. See
-> [METHODOLOGY.md §8](METHODOLOGY.md#8-dflash-enablement-the-silent-no-op-gotcha)
+> [METHODOLOGY.md §8](METHODOLOGY.md#dflash-enablement)
 > and [troubleshooting.md#dflash-silent-noop](../troubleshooting.md#dflash-silent-noop).
+
+<a id="c16-dflash-do-not-use"></a>
 
 ## ⚠️ c=16 + DFlash: do not use
 
@@ -169,11 +179,13 @@ missing data, they are *findings*.
 
 > Always: when DFlash is on, pass `--spec-type draft-dflash --spec-draft-n-max 16`
 > (else it silently does nothing). See also
-> [README.md — Best practices / Pitfalls](../../README.md#best-practices-pitfalls-read-this-before-using-dflash-or-c16).
+> [README.md — Best practices / Pitfalls](../../README.md#known-good-and-known-bad).
 
 ---
 
-## Study 1 — DFlash anchor (greedy, batch 1) — Meta-comparable
+<a id="study-1-dflash-anchor"></a>
+
+## Study 1 — DFlash anchor (greedy, batch 1) — Meta-aligned
 
 6-prompt diverse set, `temp=0 seed=0`, `-np 1 -c 8192`, `max_tokens=256`,
 **3 reps** (median + min/max). Headline result placing gfx1151 against Meta's
@@ -208,17 +220,19 @@ ExecuTorch, and RTX using llama.cpp."* All on K-Quant-17GB + quantized drafter.
 | **gfx1151 (this repo, 17gb)** | **10.48** | **23.03** | **2.20×** | **llama.cpp** |
 | **gfx1151 (this repo, dynamic)** | **9.14** | **21.82** | **2.39×** | **llama.cpp** |
 
-Our 17gb row matches Meta's RTX 5090 methodology exactly (greedy, batch 1, same
-K-quant + quantized drafter, llama.cpp). gfx1151 lands **between the M5 Max
-(1.8×) and the RTX 5090 (3.1×)** — credible for a 50 TOPS NPU/iGPU-class part.
-The dynamic row is **novel** (Meta did not publish a dynamic DFlash number); its
-higher speedup reflects DFlash recovering more of the slower dynamic baseline.
+Our 17gb row aligns the controls Meta disclosed for its RTX 5090 row: greedy
+decoding, batch 1, K-Quant-17GB plus quantized drafter, and llama.cpp. Meta did
+not publish its exact prompt corpus or complete harness, so this is the closest
+reproducible, methodology-aligned comparison—not an exact replication. The
+dynamic row is **original to this repository**; Meta did not publish a dynamic
+DFlash number.
 
 > **Comparability caveat.** gfx1151's ~215 GB/s unified fabric is much narrower
 > than the RTX 5090's GDDR7, so absolute tok/s differs (10.5 vs 74.9 baseline).
-> The **speedup ratio** + methodology are the directly comparable quantities.
+> The speedup ratio is a useful aligned anchor, subject to the unpublished-prompt
+> and cross-platform differences above.
 
-## Study 2 — Throughput under load (temp 1.0) — NOT Meta-comparable
+## Study 2 — Throughput under load (temp 1.0) — original study
 
 `temp=1.0 top_p=0.95 top_k=64 seed=42`, `reasoning_strength=high`, `max_tokens=512`,
 per-slot context 8192 (no truncation), **5 reps** (median + min/max). c=16
@@ -246,7 +260,7 @@ compare the speedup ratios here to Meta's table.
 - **DFlash speedup shrinks as concurrency rises.** At c=1 it is still ~2.1–2.4×
   (matching Study 1). At c=4 it falls to ~1.75× (17gb) and ~1.35× (dynamic) on
   aggregate throughput. At c=16, DFlash is **pathological** — see the warning
-  block above and [`METHODOLOGY.md §6`](METHODOLOGY.md#6-the-c16-dflash-pathology).
+  block above and [`METHODOLOGY.md §6`](METHODOLOGY.md#c16-dflash-pathology).
 - **c=16 baselines are the throughput winners** (17gb 34.5, dynamic 31.0 tok/s)
   — and you keep them by leaving DFlash **off**.
 - **Aggregate vs per-request.** Aggregate tok/s (`Σ tokens ÷ max per-request
@@ -280,15 +294,17 @@ answers, and measures its memory delta vs text-only.
   drafts the text continuation; the speedup survives.
 - **VRAM ≈ 1093 MiB across all cells** — the carve-out counter only ticks for
   carve-out-path allocations; the mmap'd GGUF and unified-host-visible GPU
-  buffers don't increment it. **Trust VmPeak, not rocm-smi** — see
-  [`METHODOLOGY.md §5`](METHODOLOGY.md#5-the-memory-methodology-trust-vmpeak-not-rocm-smi-or-vmhwm).
+  buffers don't increment it. VmPeak is the most useful historical
+  process-level mapped-memory envelope for this workload; see
+  [`METHODOLOGY.md §5`](METHODOLOGY.md#memory-methodology).
 
 ## Memory table — the full footprint picture (VmPeak)
 
-Pulled from the cell JSONs. On Strix Halo, **VmPeak is the real footprint**
-(the mmap'd GGUF + GPU-offloaded buffers all live in the process address space);
-`VmHWM` undercounts (1–10 GiB) and `rocm-smi` VRAM shows only the ~32 GiB
-carve-out (~1 GiB used — misleading).
+Pulled from the cell JSONs. On Strix Halo, VmPeak is the most useful
+process-level **mapped-memory envelope** observed for this mmap + GPU-offload
+workload. It includes virtual mappings and is not equivalent to resident
+physical memory. `VmHWM` and the `rocm-smi` carve-out counter materially
+under-report the workload's effective unified-memory demand in these runs.
 
 | Cell | VmPeak (GiB) | VmHWM (GiB) | VRAM (MiB) | Notes |
 |---|---|---|---|---|

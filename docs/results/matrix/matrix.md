@@ -1,6 +1,6 @@
 # llama.cpp benchmark matrix
 
-### Study 1 — DFlash anchor (greedy, batch 1, diverse prompt set) — Meta-comparable
+### Study 1 — DFlash anchor (greedy, batch 1, diverse prompt set) — Meta-aligned
 
 | weight | mode | tok/s | TTFT p50 (s) | TPOT (s) | footprint VmPeak (GiB) | Speedup | draft acceptance |
 |---|---|---|---|---|---|---|---|
@@ -9,7 +9,7 @@
 | dynamic | baseline | 9.1 | 0.49 | 0.1082 | 26.6 | 1.00x | — |
 | dynamic | DFlash | 21.8 | 0.51 | 0.0486 | 29.3 | 2.39x | 24% |
 
-### Study 2 — Throughput under load (temp 1.0) — NOT Meta-comparable
+### Study 2 — Throughput under load (temp 1.0) — original study
 
 | weight | np | mode | agg tok/s | TTFT p90 (s) | TPOT med (s) | footprint VmPeak (GiB) | acceptance |
 |---|---|---|---|---|---|---|---|

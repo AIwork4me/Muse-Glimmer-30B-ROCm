@@ -1,7 +1,7 @@
 [project]
 name = "muse-glimmer-30b-rocm"
 version = "0.1.0"
-description = "Muse-Glimmer-30B on AMD gfx1151 (Strix Halo) via vLLM/ROCm"
+description = "Reproducible RDNA inference and benchmarking reference for Meta Muse-Glimmer-30B"
 requires-python = "==3.12.*"
 dependencies = [
     "torch==2.10.0+rocm7.13.0a20260513",
@@ -9,7 +9,14 @@ dependencies = [
     "numpy<2",
     "huggingface_hub>=0.24",
     "aiohttp",
+]
+
+[dependency-groups]
+# Installed by `uv sync` by default. Keep server-test clients and the test
+# runner out of the inference/runtime dependency set.
+dev = [
     "pytest",
+    "requests",
 ]
 
 [tool.uv]

@@ -23,7 +23,13 @@ if [ ! -f "$MODEL_DIR/config.json" ]; then
     exit 1
 fi
 
-# Comments stripped from serve-args.conf; flags passed positionally.
-# shellcheck disable=SC2046
-exec uv run --no-sync vllm serve "$MODEL_DIR" \
-    $(grep -v '^[[:space:]]*#' "$HERE/configs/serve-args.conf" | xargs)
+# Parse each non-comment config line into an argument array. This avoids command
+# substitution, accidental glob expansion, and evaluation of shell metacharacters.
+SERVE_ARGS=()
+while IFS= read -r line; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    read -r -a words <<<"$line"
+    SERVE_ARGS+=("${words[@]}")
+done < "$HERE/configs/serve-args.conf"
+
+exec uv run --no-sync vllm serve "$MODEL_DIR" "${SERVE_ARGS[@]}"

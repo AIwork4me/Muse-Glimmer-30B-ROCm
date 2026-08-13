@@ -1,0 +1,67 @@
+name: Hardware validation
+description: Submit auditable evidence for an RDNA platform.
+title: "[hardware] "
+labels: ["hardware-validation"]
+body:
+  - type: markdown
+    attributes:
+      value: Read docs/hardware-validation.md and attach or link the reproducibility bundle.
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and gfx target
+      placeholder: Radeon W7900 / gfx1100
+    validations:
+      required: true
+  - type: input
+    id: memory
+    attributes:
+      label: VRAM or unified memory
+    validations:
+      required: true
+  - type: textarea
+    id: stack
+    attributes:
+      label: Complete software stack
+      description: ROCm, kernel, Python, PyTorch, and vLLM or llama.cpp commit.
+    validations:
+      required: true
+  - type: textarea
+    id: model
+    attributes:
+      label: Model artifacts
+      description: Repository, revision, filenames, sizes, and SHA256 where available.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command
+      render: shell
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options: ["Pass", "Fail", "Partial"]
+    validations:
+      required: true
+  - type: textarea
+    id: measurements
+    attributes:
+      label: Measurements and methodology
+      description: Throughput, TTFT/TPOT, memory method, repetitions, and workload.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs and artifact link
+      description: Redact secrets and personal data.
+    validations:
+      required: true
+  - type: textarea
+    id: issues
+    attributes:
+      label: Known issues and negative results

@@ -1,69 +1,187 @@
 #!/usr/bin/env bash
-# GGUF quick-start: build llama.cpp for gfx1151 (once), fetch Meta's official
-# K-quant GGUF, and serve it with llama-server. This is the "chat in minutes,
-# no vLLM compile" path — independent of the vLLM venv (needs only system
-# python3 + curl + cmake/g++).
+# Reproducible GGUF quick-start for gfx1151.
 #
-# Meta ships its own calibrated quants under meta-models/Muse-Glimmer-30B-GGUF
-# (custom "kquant" names, not standard llama.cpp Q4_K_M):
-#   muse-glimmer-30B-kquant-17gb.gguf     ~17 GiB, fits 24/32 GB envelopes (default)
-#   muse-glimmer-30B-kquant-dynamic.gguf  ~under 20 GiB, higher fidelity
-#   mmproj-kquant.gguf                    multimodal projector (vision)
-#   dflash-kquant.gguf                    DFlash speculative-drafter
+# Defaults use the exact llama.cpp and GGUF revisions recorded in
+# configs/validated-stack.json and verify every selected model artifact.
+# Expert overrides are explicit and experimental:
+#   LLAMA_CPP_REF=master GGUF_REVISION=main bash scripts/gguf-quickstart.sh
 #
-# Override the file with GGUF_FILE=... ; enable vision with WITH_MMProj=1.
-# Downloads go through https://hf-mirror.com (HF_ENDPOINT) via the project's
-# parallel range downloader (scripts/hf_parallel_get.py) — same slow-CDN logic
-# as the BF16 fetch; set USE_HF_DOWNLOAD=1 for the stock single-stream tool.
+# Optional features:
+#   WITH_MMPROJ=1  fetch and attach the validated vision projector
+#   WITH_DFLASH=1  fetch and enable the validated DFlash drafter
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$HERE"
 export PATH="$HOME/.local/bin:$PATH"
-export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+
+for cmd in cmake curl git python3; do
+    command -v "$cmd" >/dev/null 2>&1 || {
+        echo "ERROR: required command not found: $cmd" >&2
+        exit 1
+    }
+done
+
+stack_value() {
+    python3 - "$HERE/configs/validated-stack.json" "$1" <<'PY'
+import json, sys
+value = json.load(open(sys.argv[1]))
+for key in sys.argv[2].split('.'):
+    value = value[key]
+print(value)
+PY
+}
 
 LLAMA="$HERE/third_party/llama.cpp"
-GGUF_REPO="meta-models/Muse-Glimmer-30B-GGUF"
+LLAMA_CPP_REPO="${LLAMA_CPP_REPO:-$(stack_value llama_cpp.source_repo)}"
+VALIDATED_LLAMA_CPP_REF="$(stack_value llama_cpp.commit)"
+LLAMA_CPP_REF="${LLAMA_CPP_REF:-$VALIDATED_LLAMA_CPP_REF}"
+BUILD_DIR="${LLAMA_CPP_BUILD_DIR:-$LLAMA/build}"
+BUILD_STAMP="$BUILD_DIR/.muse-llama-ref"
+
+GGUF_REPO="$(stack_value model.gguf_id)"
+VALIDATED_GGUF_REVISION="$(stack_value model.gguf_revision)"
+GGUF_REVISION="${GGUF_REVISION:-$VALIDATED_GGUF_REVISION}"
 GGUF_FILE="${GGUF_FILE:-muse-glimmer-30B-kquant-17gb.gguf}"
 MMPROJ_FILE="mmproj-kquant.gguf"
-DEST="models"
-mkdir -p "$DEST"
+DFLASH_FILE="dflash-kquant.gguf"
+DEST="${MODEL_DEST:-models}"
+PORT="${PORT:-8080}"
+export HF_ENDPOINT="${HF_ENDPOINT:-https://huggingface.co}"
 
-# 1. Build llama.cpp for gfx1151 (once).
-if [ ! -x "$LLAMA/build/bin/llama-server" ]; then
-    echo "Building llama.cpp (HIP, gfx1151) ..."
-    rm -rf "$LLAMA"
-    git clone --depth 1 https://github.com/ggml-org/llama.cpp "$LLAMA"
-    cmake -S "$LLAMA" -B "$LLAMA/build" \
-        -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1151 -DCMAKE_BUILD_TYPE=Release
-    cmake --build "$LLAMA/build" -j
+echo "llama.cpp source: $LLAMA_CPP_REPO"
+echo "llama.cpp ref   : $LLAMA_CPP_REF"
+if [ "$LLAMA_CPP_REF" = "$VALIDATED_LLAMA_CPP_REF" ]; then
+    echo "llama.cpp track : validated reference"
+else
+    echo "llama.cpp track : latest/experimental override"
+fi
+echo "HF endpoint     : $HF_ENDPOINT"
+echo "GGUF revision   : $GGUF_REVISION"
+if [ "$GGUF_REVISION" = "$VALIDATED_GGUF_REVISION" ]; then
+    echo "GGUF track      : validated reference (hash verification enabled)"
+else
+    echo "GGUF track      : latest/experimental override"
 fi
 
-# 2. Fetch the GGUF (+ mmproj if requested).
-fetch_file() {  # $1 = filename
-    local f="$1"
-    if [ -f "$DEST/$f" ]; then echo "  have $f"; return; fi
-    echo "  fetching $f via $HF_ENDPOINT ..."
-    if [ "${USE_HF_DOWNLOAD:-0}" = "1" ]; then
-        uv run --no-sync hf download "$GGUF_REPO" "$f" --local-dir "$DEST"
+# Clone once, then fetch and detach at the selected ref on every run. Existing
+# uncommitted llama.cpp changes are never deleted; checkout fails instead.
+if [ ! -d "$LLAMA/.git" ]; then
+    if [ -e "$LLAMA" ] && [ -n "$(find "$LLAMA" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+        echo "ERROR: $LLAMA exists but is not a git checkout; move it aside first." >&2
+        exit 1
+    fi
+    mkdir -p "$HERE/third_party"
+    git clone --filter=blob:none --no-checkout "$LLAMA_CPP_REPO" "$LLAMA"
+fi
+CURRENT_LLAMA_CPP_COMMIT="$(git -C "$LLAMA" rev-parse HEAD 2>/dev/null || true)"
+if [ "$CURRENT_LLAMA_CPP_COMMIT" != "$LLAMA_CPP_REF" ]; then
+    if ! git -C "$LLAMA" diff --quiet --ignore-submodules HEAD -- ||
+       ! git -C "$LLAMA" diff --cached --quiet; then
+        echo "ERROR: $LLAMA has tracked changes; refusing to change commits." >&2
+        exit 1
+    fi
+    git -C "$LLAMA" fetch --depth 1 "$LLAMA_CPP_REPO" "$LLAMA_CPP_REF"
+    git -C "$LLAMA" checkout --detach FETCH_HEAD
+elif ! git -C "$LLAMA" diff --quiet --ignore-submodules HEAD -- ||
+     ! git -C "$LLAMA" diff --cached --quiet; then
+    echo "ERROR: validated llama.cpp checkout has tracked modifications." >&2
+    exit 1
+else
+    echo "llama.cpp checkout already at validated commit; no fetch needed"
+fi
+ACTUAL_LLAMA_CPP_COMMIT="$(git -C "$LLAMA" rev-parse HEAD)"
+if [[ "$LLAMA_CPP_REF" =~ ^[0-9a-fA-F]{40}$ ]] &&
+   [ "$ACTUAL_LLAMA_CPP_COMMIT" != "$LLAMA_CPP_REF" ]; then
+    echo "ERROR: requested $LLAMA_CPP_REF but checked out $ACTUAL_LLAMA_CPP_COMMIT" >&2
+    exit 1
+fi
+echo "llama.cpp commit: $ACTUAL_LLAMA_CPP_COMMIT"
+
+previous_build_commit=""
+[ -f "$BUILD_STAMP" ] && previous_build_commit="$(<"$BUILD_STAMP")"
+if [ ! -x "$BUILD_DIR/bin/llama-server" ] ||    [ "$previous_build_commit" != "$ACTUAL_LLAMA_CPP_COMMIT" ]; then
+    echo "Building llama.cpp (HIP, gfx1151) ..."
+    cmake -S "$LLAMA" -B "$BUILD_DIR"         -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1151 -DCMAKE_BUILD_TYPE=Release
+    cmake --build "$BUILD_DIR" -j "${BUILD_JOBS:-$(nproc)}"
+    printf '%s\n' "$ACTUAL_LLAMA_CPP_COMMIT" > "$BUILD_STAMP"
+else
+    echo "llama.cpp build already matches $ACTUAL_LLAMA_CPP_COMMIT"
+fi
+
+mkdir -p "$DEST"
+is_recorded_artifact() {
+    python3 - "$HERE/configs/artifact-manifest.json" "$1" <<'PY'
+import json, sys
+files = json.load(open(sys.argv[1]))["sets"]["gguf"]["files"]
+raise SystemExit(0 if any(item["path"] == sys.argv[2] for item in files) else 1)
+PY
+}
+
+fetch_file() {
+    local filename="$1"
+    local can_verify=0
+    if [ "$GGUF_REVISION" = "$VALIDATED_GGUF_REVISION" ] &&        is_recorded_artifact "$filename"; then
+        can_verify=1
+    fi
+
+    if [ ! -f "$DEST/$filename" ]; then
+        echo "fetching $filename via $HF_ENDPOINT ..."
+        if [ "${USE_HF_DOWNLOAD:-0}" = "1" ]; then
+            command -v uv >/dev/null 2>&1 || {
+                echo "ERROR: uv is required with USE_HF_DOWNLOAD=1" >&2
+                exit 1
+            }
+            uv run --no-sync hf download "$GGUF_REPO" "$filename"                 --revision "$GGUF_REVISION" --local-dir "$DEST"
+        else
+            python3 "$HERE/scripts/hf_parallel_get.py" "$GGUF_REPO" "$filename"                 --revision "$GGUF_REVISION" --local-dir "$DEST"                 --concurrency "${NCONNS:-24}"
+        fi
     else
-        python3 "$HERE/scripts/hf_parallel_get.py" "$GGUF_REPO" "$f" \
-            --local-dir "$DEST" --concurrency "${NCONNS:-24}"
+        echo "have $filename"
+    fi
+
+    if [ "$can_verify" -eq 1 ]; then
+        if ! python3 "$HERE/scripts/verify_artifacts.py" gguf "$DEST" "$filename"; then
+            suffix="$(date +%s)"
+            quarantine="$DEST/$filename.corrupt.$suffix"
+            mv "$DEST/$filename" "$quarantine"
+            [ ! -e "$DEST/$filename.parts.json" ] ||
+                mv "$DEST/$filename.parts.json" "$DEST/$filename.parts.json.invalid.$suffix"
+            echo "ERROR: invalid artifact quarantined at $quarantine; rerun to fetch it." >&2
+            exit 1
+        fi
+    else
+        echo "WARNING: $filename is outside the validated artifact set; hash not asserted." >&2
     fi
 }
+
 fetch_file "$GGUF_FILE"
-MMPROJ_ARGS=()
-if [ "${WITH_MMProj:-0}" = "1" ]; then
+SERVER_ARGS=(-m "$DEST/$GGUF_FILE")
+if [ "${WITH_MMPROJ:-0}" = "1" ]; then
     fetch_file "$MMPROJ_FILE"
-    MMPROJ_ARGS=(--mmproj "$DEST/$MMPROJ_FILE")
+    SERVER_ARGS+=(--mmproj "$DEST/$MMPROJ_FILE")
+fi
+if [ "${WITH_DFLASH:-0}" = "1" ]; then
+    fetch_file "$DFLASH_FILE"
+    SERVER_ARGS+=(
+        -md "$DEST/$DFLASH_FILE" -ngld 99
+        --spec-type draft-dflash --spec-draft-n-max 16
+    )
 fi
 
-# 3. Serve. Text-focused quick-start; with WITH_MMProj=1 the vision projector is
-#    attached (llama.cpp has first-class muse_glimmer arch support, so it loads
-#    natively). Add -np <slots> (e.g. -np 16 -c 16384) to raise concurrent
-#    throughput — the default 4 slots plateau at ~22 tok/s (see
-#    docs/results/benchmark.md).
-echo "Serving on http://127.0.0.1:8080 ..."
-exec "$LLAMA/build/bin/llama-server" \
-    -m "$DEST/$GGUF_FILE" "${MMPROJ_ARGS[@]}" \
-    -ngl 999 -c 32768 --port 8080
+if ! python3 - "$PORT" <<'PY_PORT'
+import socket
+import sys
+sock = socket.socket()
+try:
+    sock.bind(("127.0.0.1", int(sys.argv[1])))
+finally:
+    sock.close()
+PY_PORT
+then
+    echo "ERROR: port $PORT is already in use; choose PORT=<free-port>." >&2
+    exit 1
+fi
+
+echo "Serving on http://127.0.0.1:$PORT ..."
+exec "$BUILD_DIR/bin/llama-server" "${SERVER_ARGS[@]}"     -ngl 999 -c 32768 --port "$PORT" --jinja

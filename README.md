@@ -2,251 +2,238 @@
 
 [![CI](https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm/actions/workflows/ci.yml/badge.svg)](https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-![ROCm](https://img.shields.io/badge/ROCm-7.2.1-orange)
-![GPU](https://img.shields.io/badge/GPU-gfx1151%20RDNA%203.5-red)
-![Python](https://img.shields.io/badge/Python-3.12-yellow)
 
-> Run **Meta's Muse-Glimmer-30B** (dense 29.6B vision-language model, Apache-2.0)
-> on **AMD RDNA** consumer/APU silicon — validated today on the **Ryzen AI MAX+ 395
-> ("Strix Halo", gfx1151)**, with **Radeon discrete GPUs** (e.g. W7900) on the roadmap.
+> **The reproducible RDNA reference for Meta Muse-Glimmer-30B — from
+> MI-series recipes to Ryzen AI and Radeon.**
 
-An RDNA-focused inference + benchmarking project. Two serving paths, a full
-speed/memory matrix, **DFlash speculative decoding working on llama.cpp**, and
-the CDNA→RDNA adaptation documented delta-by-delta. For **MI-series** (CDNA
-datacenter) cards, use Meta's official MI300X recipe directly
-([vllm-project/recipes#776](https://github.com/vllm-project/recipes/pull/776));
-this repo adapts that recipe to RDNA silicon.
+Meta's upstream recipe establishes the model on MI300X/MI355X (CDNA). This
+repository records the engineering delta required for RDNA, validates it on real
+hardware, preserves raw results and failures, and makes the same protocol
+available to Radeon contributors.
 
----
+**Actually validated here:** AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S,
+`gfx1151` (RDNA 3.5). Radeon dGPUs are planned, not claimed as validated.
 
-## Contents
+The working method is:
 
-- [Features](#features)
-- [Supported hardware](#supported-hardware)
-- [Requirements](#requirements)
-- [Quick start](#quick-start)
-- [Headline results](#headline-results)
-- [Best practices & pitfalls — read before DFlash or c=16](#best-practices--pitfalls--read-before-dflash-or-c16)
-- [What changed from Meta's MI300X recipe](#what-changed-from-metas-mi300x-recipe)
-- [Docs](#docs)
-- [Status](#status) · [License](#license) · [Acknowledgements](#acknowledgements) · [Contributing](#contributing)
+> **Adapt → Validate → Benchmark → Explain → Reproduce**
 
----
+## Choose a path
 
-## Features
-
-- **Two serving paths** — a full-feature **vLLM** server (BF16: vision, native
-  `muse_glimmer` reasoning + ATEM tool-call parsers, 128K context, continuous
-  batching) and a fast/light **llama.cpp GGUF** path (chat in minutes, no compile).
-- **DFlash speculative decoding on llama.cpp** — **2.2–2.4× faster** decode with
-  byte-identical output (greedy). Sits between Apple M5 Max (1.8×) and RTX 5090
-  (3.1×) in Meta's own methodology.
-- **Full benchmark matrix** — 2 weight sizes × {c1, c4, c16} × {baseline, DFlash}
-  + a vision axis, with tok/s, TTFT, TPOT, and real memory footprint per cell.
-- **The CDNA → RDNA adaptation, documented** — every delta from Meta's MI300X
-  recipe (attention backend, precision, install, KV, spec-decode) with the *why*.
-- **Pitfalls you'd otherwise hit the hard way** — DFlash @ c=16 is pathological;
-  `--spec-type` defaults to a silent no-op; APU memory accounting is misleading.
-  All verified, with fixes + a best-practice table.
-- **Reproducible** — pinned stack, a `METHODOLOGY.md`, and CI-safe tests
-  (GitHub Actions runs the no-GPU checks; GPU/server tests run locally).
-
-## Supported hardware
-
-| Status | GPU | Notes |
+| Path | Best for | What you get |
 |---|---|---|
-| ✅ Validated | **gfx1151 — Ryzen AI MAX+ 395 / Radeon 8060S "Strix Halo"** (RDNA 3.5) | All numbers in this repo are from this part. |
-| 🚧 Roadmap | **Radeon RDNA dGPUs** (e.g. W7900 / gfx1100-class) | Same RDNA family; planned follow-on. |
-| 📘 Upstream | **MI-series** (CDNA datacenter, e.g. MI300X/MI355X) | For CDNA cards, use Meta's official MI300X recipe: [vllm-project/recipes#776](https://github.com/vllm-project/recipes/pull/776). |
+| **Fast local path — llama.cpp + Meta GGUF** | Local chat, low memory, quick evaluation | Pinned HIP build, validated K-quant, optional vision and DFlash |
+| **Full inference stack — vLLM + BF16** | Reasoning/tool parsing, vision, 128K context, continuous batching | Pinned source build, TheRock gfx1151 runtime, `TRITON_ATTN` |
 
-## Requirements
-
-| Item | Value |
-|---|---|
-| APU/GPU | gfx1151 (Ryzen AI MAX+ 395 / Radeon 8060S) |
-| ROCm | **7.2.1** (community-verified; validated here). **7.14.0** (released 2026-07-16) is the **first official** gfx1151 release — it ships via **TheRock**, not the apt repo (which tops at 7.2.4). See `docs/strix-halo-setup.md`. |
-| Linux kernel | ≥ 6.16.9 (have 6.17; fixes a UMA "only 15.5 GB visible" bug) |
-| Python | 3.12 (gfx1151 wheels fail on 3.13) |
-| Free memory | ~20 GiB (GGUF path) · ~60 GiB (BF16 vLLM path) — unified LPDDR5X |
-| Toolchain | `uv`, `cmake`, a HIP/ROCm toolchain |
-| Model | Meta's `muse-glimmer-30B-kquant-17gb.gguf` (GGUF) or BF16 weights (vLLM) — Apache-2.0, **not gated, no token** |
-
-`bash scripts/00-check-env.sh` asserts all of the above before you start.
-
----
-
-## Quick start
-
-### Fast path — GGUF, chat in minutes (no vLLM compile)
+### Fast local path
 
 ```bash
 git clone https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm.git
 cd Muse-Glimmer-30B-ROCm
-bash scripts/gguf-quickstart.sh   # builds llama.cpp (HIP/gfx1151) + fetches the Q4 GGUF
-                                  # → llama-server on http://127.0.0.1:8080
+bash scripts/00-check-env.sh
+bash scripts/gguf-quickstart.sh
+# OpenAI-compatible server: http://127.0.0.1:8080
 ```
 
-Add DFlash (2.2× faster, identical output) by serving with:
+The quick start checks out the validated llama.cpp commit, downloads from
+official Hugging Face at the recorded model revision, verifies size/SHA256, and
+reuses a matching build on reruns. Add `WITH_MMPROJ=1` for vision or
+`WITH_DFLASH=1` for single-stream speculative decoding.
+
+### Full inference stack
 
 ```bash
-third_party/llama.cpp/build/bin/llama-server \
-  -m models/muse-glimmer-30B-kquant-17gb.gguf \
-  -md models/dflash-kquant.gguf -ngld 99 \
-  --spec-type draft-dflash --spec-draft-n-max 16 \   # ← required; see Pitfalls
-  -ngl 999 -c 32768 --port 8080 --jinja
+uv sync
+bash scripts/00-check-env.sh
+bash scripts/01-build-vllm.sh
+bash scripts/02-fetch-model.sh
+bash scripts/03-serve-vllm.sh
+# OpenAI-compatible server: http://127.0.0.1:8000
 ```
 
-Vision: add `--mmproj models/mmproj-kquant.gguf`. Concurrency: add `-np <slots>`
-(default 4 slots plateau ~22 tok/s; see Pitfalls before raising it).
+This path needs about 60 GiB of GPU-visible unified memory and a source build.
+The environment checker treats that threshold as a hard requirement for this
+validated BF16 configuration.
 
-### Full-feature path — vLLM (BF16, ~1 h source compile)
+## Headline validated results
+
+All figures below are historical evidence from the preserved ROCm 7.2.1
+reference stack on `gfx1151`; they are not ROCm 7.14 or Radeon dGPU claims.
+
+### Study 1 — Meta-aligned DFlash anchor
+
+Batch 1, greedy decoding, llama.cpp, Meta K-Quant weights and quantized drafter:
+
+| Configuration | Baseline | DFlash | Speedup |
+|---|---:|---:|---:|
+| gfx1151, K-Quant-17GB | 10.48 tok/s | 23.03 tok/s | **2.20×** |
+| gfx1151, dynamic K-Quant | 9.14 tok/s | 21.82 tok/s | **2.39×** |
+
+This is a **methodology-aligned comparison**, not an identical reproduction of
+Meta's prompt corpus: Meta did not publish that corpus. The recorded arithmetic
+smoke check is byte-identical under greedy decoding. The repository also
+provides a six-prompt corpus-wide checker; no expanded pass claim is made until
+that GPU test is run and recorded.
+
+### Study 2 — original throughput-under-load study
+
+| Weight | c=1 baseline / DFlash | c=4 baseline / DFlash | c=16 baseline |
+|---|---:|---:|---:|
+| 17GB | 10.52 / 22.26 tok/s | 15.60 / 27.30 tok/s | 34.47 tok/s |
+| dynamic | 9.09 / 19.89 tok/s | 20.90 / 28.22 tok/s | 31.05 tok/s |
+
+This is an original concurrency study, not a Meta-aligned comparison anchor.
+
+### Study 3 — original multimodal validation
+
+Five vision cells loaded the fixed test image through
+`mmproj-kquant.gguf`, produced image-grounded responses, and captured
+throughput/latency/mapped-memory deltas. These results validate only the
+recorded `gfx1151` stack.
+
+Full definitions, raw JSON, variance and negative cells:
+
+- [Benchmark report](docs/results/benchmark.md)
+- [Methodology](docs/results/METHODOLOGY.md)
+- [Raw ROCm 7.2.1 matrix](docs/results/matrix/)
+- [Validation-track index](docs/results/README.md)
+
+## Why this repository exists
+
+The upstream CDNA recipe is the reference point, not baggage. The contribution
+here is the documented translation layer:
+
+| Engineering layer | Upstream MI-series / CDNA reference | Validated RDNA translation |
+|---|---|---|
+| Packaging | ROCm vLLM image / recipe | Source build for `gfx1151` |
+| Kernels | AITER-oriented recipe | `TRITON_ATTN`; AITER disabled |
+| Precision | BF16 and supported FP8 paths | BF16 for vLLM; Meta K-quant for llama.cpp |
+| Topology | MI300X/MI355X tensor parallel | Single integrated GPU, TP=1 |
+| Memory | Dedicated HBM accounting | Unified-memory caveats and process mapped-memory envelope |
+| Speculative decoding | DFlash in upstream model work | Validated llama.cpp path; vLLM limitation recorded |
+| Evidence | Upstream MI validation | Raw RDNA cells, exact flags, failures, hashes and manifests |
+
+This is not a collection of random workarounds. It is a
+[documented CDNA → RDNA adaptation map](docs/adaptation.md), with each delta
+classified as architectural, version-specific, temporary upstream limitation,
+validated workaround, or historical workaround.
+
+## Reproducibility contract
+
+Two machine-readable files define the reference:
+
+- [`configs/validated-stack.json`](configs/validated-stack.json) pins hardware
+  evidence, host/runtime layers, Python, PyTorch, vLLM, llama.cpp, model
+  revisions, backend, precision and patches.
+- [`configs/artifact-manifest.json`](configs/artifact-manifest.json) records
+  exact byte sizes and SHA256 hashes for the BF16 weights/configuration and all
+  GGUF, DFlash and projector files used by the published results.
+
+The defaults are the **validated reference**. Overrides are explicit and
+reported as **latest/experimental**:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"     # uv lives here
-uv sync                                  # TheRock gfx1151 torch + deps (Python 3.12)
-bash scripts/00-check-env.sh             # ROCm 7.2.1 · kernel ≥6.16.9 · gfx1151 · ≥60 GiB
-bash scripts/01-build-vllm.sh            # source-build vLLM (PR #51655) for gfx1151
-bash scripts/02-fetch-model.sh           # ~55 GiB BF16 weights (parallel downloader)
-bash scripts/03-serve-vllm.sh            # OpenAI server on http://127.0.0.1:8000
+# Optional regional mirror; the official endpoint remains the default.
+HF_ENDPOINT=https://hf-mirror.com bash scripts/02-fetch-model.sh
+
+# Deliberately follow newer upstream state; benchmark claims no longer apply.
+MODEL_REVISION=main bash scripts/02-fetch-model.sh
+LLAMA_CPP_REF=master GGUF_REVISION=main bash scripts/gguf-quickstart.sh
 ```
 
-> **`uv run --no-sync` is load-bearing** on every `uv run`: vLLM is editable-installed
-> and not in `uv.lock`; a bare `uv run` re-syncs and wipes it. See
-> [`troubleshooting.md`](docs/troubleshooting.md).
+Mirrors are transport fallbacks, not trust roots. Validated artifacts are still
+checked against the committed manifest.
 
-> **Slow/region-locked link?** `02-fetch-model.sh` uses `HF_ENDPOINT=https://hf-mirror.com`
-> + a 24-connection parallel range downloader (`scripts/hf_parallel_get.py`).
+## Hardware validation matrix
 
----
-
-## Headline results
-
-### DFlash speculative decoding (greedy, batch-1 — Meta-comparable)
-
-Same methodology as Meta's published table (llama.cpp, K-Quant-17GB + quantized drafter):
-
-| GPU | Baseline (tok/s) | DFlash (tok/s) | Speedup |
-|---|---|---|---|
-| Nvidia RTX 5090 *(Meta)* | 74.9 | 233.4 | 3.1× |
-| Apple M5 Max *(Meta)* | 26.6 | 50.2 | 1.8× |
-| **gfx1151, 17gb *(this repo)*** | **10.48** | **23.03** | **2.20×** |
-| **gfx1151, dynamic *(this repo)*** | **9.14** | **21.82** | **2.39×** |
-
-Byte-equivalence **PASS** — greedy spec-decode is exact (baseline & DFlash both
-emit `391` for `17 × 23`).
-
-### vLLM (BF16) vs llama.cpp (Q4 K-quant) — throughput under load
-
-`/v1/completions`, 512 output tokens/request, GPU (HIP):
-
-| Concurrency | vLLM BF16 (tok/s) | llama.cpp Q4 (tok/s) | Q4 speedup |
-|---|---|---|---|
-| 1 | 4.2 | **10.5** | 2.5× |
-| 4 | 14.0 | **21.3** | 1.5× |
-| 16 | 40.8 | **102.0** | 2.5× |
-
-llama.cpp Q4 is faster at every concurrency (~4× less memory traffic — decode is
-bandwidth-bound on this APU). **vLLM's edge is features**, not speed: native
-`muse_glimmer` reasoning + ATEM tool-call parsing, vision/multimodal, 128K context,
-automatic continuous batching. DFlash's speedup **shrinks with concurrency**
-(c1 ~2.2× → c4 ~1.35–1.75×) and **breaks at c=16** — see below.
-
-Full matrix + methodology: [`docs/results/benchmark.md`](docs/results/benchmark.md),
-[`docs/results/METHODOLOGY.md`](docs/results/METHODOLOGY.md).
-
----
-
-## Best practices & pitfalls — read before DFlash or c=16
-
-### Best-practice config table
-
-| Use case | Config | Expected |
+| Status | Platform | Evidence |
 |---|---|---|
-| Single-stream chat (c=1) | **DFlash ON** — `--spec-type draft-dflash --spec-draft-n-max 16` | **~2.2× faster**, identical output, ~+3 GiB |
-| Light concurrent (c ≤ 4) | **DFlash ON** | ~1.3–1.75× aggregate; mind the +3 GiB drafter footprint |
-| **High throughput (c ≥ 8, esp c=16)** | **DFlash OFF** (baseline) | c16 ~31–34 tok/s; DFlash here is **pathological** |
+| ✅ **Validated** | Ryzen AI MAX+ PRO 395 / Radeon 8060S, `gfx1151` | Full recorded reference in this repository |
+| 🚧 **Planned** | Radeon W7900, `gfx1100` | No project evidence yet |
+| 🚧 **Planned** | Other RDNA3 Radeon | Requires a comparable community submission |
+| 🚧 **Planned** | RDNA4 Radeon | Requires a comparable community submission |
+| 📘 **Upstream recipe** | MI300X / MI355X, CDNA | vLLM recipes PR #776; not revalidated here |
 
-> **DFlash is a silent no-op without `--spec-type`.** `llama-server --spec-type`
-> defaults to `none`, so `-md dflash.gguf` alone loads the drafter but never
-> drafts (1.0×). Always pass `--spec-type draft-dflash --spec-draft-n-max 16`
-> (`n_max=16` is the measured sweet spot = DFlash block_size).
+`🧪 Community validated` is reserved for a submission that includes the
+required manifest, command, logs and results. See
+[hardware-validation.md](docs/hardware-validation.md) to add one.
 
-### ⚠ Do NOT combine DFlash with `-np 16`
+## Known good and known bad
 
-It is **pathologically slow** — verified, not a fluke:
+| Configuration | Status |
+|---|---|
+| vLLM BF16 + `TRITON_ATTN` + TP=1 | Validated on `gfx1151` |
+| llama.cpp HIP + 17GB/dynamic K-quant | Validated on `gfx1151` |
+| llama.cpp DFlash, c=1 or light c≤4 | Validated; speedup depends on workload |
+| `-md dflash.gguf` without `--spec-type draft-dflash` | Silent no-op; do not use |
+| DFlash + `-np 16` | Pathological; one cell aborted after 5 h 16 m |
+| AITER or FP8 vLLM paths on `gfx1151` | Not supported by this validated stack |
+| Radeon W7900 / other dGPUs | Pending evidence |
 
-- **17gb c=16 DFlash:** a 16×48-token batch completed **0 of 768 tokens in 28 s**
-  while baseline c=16 ran at 34.5 tok/s — effectively >1000× slower per-request.
-- **dynamic c=16 DFlash:** the benchmark cell was **aborted after 5 h 16 m**;
-  draft acceptance collapsed to **0.18 %** (6,060 accepted / 3,270,000 drafted).
-- **Root cause:** at c=16 the drafter fires for all 16 slots at once, generating
-  millions of tokens that are >99.8 % rejected, while the full generate+verify
-  cost for those rejected drafts is paid in full — spec-decode goes into reverse.
-- **c=16 itself is fine** (baseline 17gb 34.5, dynamic 31.0 tok/s). The pathology
-  is DFlash-specific.
+**Negative results are results.** The project preserves the silent-DFlash
+discovery, non-completing c=16 cells, backend failures and measurement
+limitations because they prevent other developers from repeating the same
+mistakes.
 
-Full evidence: [`benchmark.md` — c=16 + DFlash: do not use](docs/results/benchmark.md#c16-dflash-do-not-use).
+## Memory terminology
 
-### Memory on Strix Halo — trust VmPeak, not `rocm-smi`
+For this mmap + GPU-offload workload, **VmPeak is the most useful
+process-level mapped-memory envelope observed**. It is virtual address-space
+size, not resident physical memory. RSS/VmHWM and `rocm-smi` VRAM counters
+alone materially under-report the effective unified-memory footprint on this
+system. The methodology preserves all three and describes stronger future
+measurements such as `smaps_rollup`, PSS, system `MemAvailable` deltas and
+cgroup accounting.
 
-The real footprint is the process **VmPeak** (~24–32 GiB). `rocm-smi` VRAM reports
-only the ~32 GiB dedicated carve-out, and `/proc` VmHWM undercounts (the GGUF is
-mmap'd + GPU-offloaded). See
-[`troubleshooting.md` — memory-footprint-apu](docs/troubleshooting.md#memory-footprint-apu).
+## Why this helps AMD AI developers
 
----
+- Reuse a reviewed CDNA → RDNA adaptation instead of rediscovering it.
+- Choose llama.cpp or vLLM from measured workload and feature tradeoffs.
+- See which precision, attention and speculative-decoding combinations worked.
+- Avoid the silent DFlash no-op and high-concurrency pathology.
+- Audit exact model/runtime inputs instead of trusting a version label alone.
+- Run a ~30B multimodal reasoning/tool-use model locally on validated Ryzen
+  AI-class hardware.
+- Contribute Radeon evidence that is comparable rather than anecdotal.
 
-## What changed from Meta's MI300X recipe
+## ROCm validation tracks
 
-Meta's reference targets CDNA (MI300X). Retargeting to RDNA (gfx1151):
+- **Validated historical/reference stack:** ROCm 7.2.1 host toolchain plus the
+  recorded TheRock runtime. Existing benchmark JSON is immutable evidence.
+- **Current official gfx1151 track:** ROCm 7.14. Results are **pending** until
+  the checklist is rerun. No 7.2.1 result is relabeled or overwritten.
 
-| | MI300X (Meta) | **gfx1151 (this repo)** |
-|---|---|---|
-| Install | docker nightly | **source build** (`PYTORCH_ROCM_ARCH=gfx1151`) — no gfx1151 docker |
-| Precision | bf16 / fp8 | **bf16 only** (RDNA 3.5 has no usable FP8) |
-| Attention | `ROCM_AITER_FA` | **`TRITON_ATTN`** (AITER is CDNA3+/RDNA4-only; `FLASH_ATTN` also fails — no gfx1151 codegen) |
-| Tensor-parallel | 4 | **1** (single iGPU) |
-| Spec-decoding | DFlash (vLLM) | **DFlash via llama.cpp** (vLLM path hits an upstream registry bug) |
+See [ROCm 7.14 validation](docs/results/rocm-7.14/README.md).
 
-Full delta table with the *why* + memory math: [`docs/adaptation.md`](docs/adaptation.md).
+## Requirements and operating notes
 
----
+- Linux kernel **≥ 6.16.9**; the comparison includes patch level.
+- Python **3.12** for the recorded TheRock wheel line.
+- About 20 GiB available for the default GGUF path; at least 60 GiB
+  GPU-visible unified memory for the validated BF16 path.
+- `uv`, `git`, `cmake`, `curl`, and a gfx1151-capable HIP toolchain.
+- `uv run --no-sync` remains required after the editable vLLM source install;
+  a normal sync reconstructs the locked environment and removes that editable
+  install.
 
-## Docs
+Setup and failure modes:
 
-- [**adaptation.md**](docs/adaptation.md) — the MI300X → gfx1151 delta, explained (the educational centerpiece).
-- [**results/benchmark.md**](docs/results/benchmark.md) — full Study 1/2/3 + the c=16 write-up.
-- [**results/METHODOLOGY.md**](docs/results/METHODOLOGY.md) — how every number was measured.
-- [strix-halo-setup.md](docs/strix-halo-setup.md) — host prerequisites.
-- [troubleshooting.md](docs/troubleshooting.md) — symptom → cause → fix.
+- [Strix Halo setup](docs/strix-halo-setup.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Adaptation map](docs/adaptation.md)
 
-## Status
+## Contributing and security
 
-✅ vLLM (BF16, `TRITON_ATTN`) · ✅ llama.cpp GGUF (Q4 kquant) · ✅ DFlash on llama.cpp
-(2.2–2.4×, byte-equivalent) · ✅ full benchmark matrix (Studies 1/2/3) · ✅ vision path
-loaded + measured · ✅ CI-safe tests. 🚧 Radeon dGPU (W7900) support · ⏸ ROCm 7.14.0
-isolated comparison — 7.14.0 (released 2026-07-16, first official gfx1151 APU support)
-ships via **TheRock**, not the legacy apt repo (which tops at 7.2.4); side-by-side plan,
-non-destructive to the proven 7.2.1 stack. See [`docs/strix-halo-setup.md`](docs/strix-halo-setup.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting hardware or benchmark
+claims. Use the issue templates for bugs, regressions, platform requests and
+hardware validation. Report security issues through [SECURITY.md](SECURITY.md).
 
-## License
+## License and acknowledgements
 
-- **This repository's code:** [Apache License 2.0](LICENSE).
-- **Model weights:** Meta's Muse-Glimmer-30B, released under
-  [Apache-2.0](https://huggingface.co/meta-models/Muse-Glimmer-30B). Download
-  implies acceptance of Meta's [usage policy](https://huggingface.co/meta-models/Muse-Glimmer-30B/blob/main/USAGE_POLICY.md).
+Repository code is [Apache-2.0](LICENSE). Model artifacts are published by Meta
+under Apache-2.0 with a separate usage policy; downloading them means accepting
+that policy.
 
-## Acknowledgements
-
-- **Meta Superintelligence Lab** for Muse-Glimmer-30B (Apache-2.0) + the published GGUFs & DFlash drafter.
-- [**llama.cpp**](https://github.com/ggml-org/llama.cpp) (first-class `muse_glimmer` + DFlash support) and [**vLLM**](https://github.com/vllm-project/vllm) (PR #51655).
-- AMD **TheRock** for the gfx1151 PyTorch nightlies, and the **ROCm** toolchain.
-
-## Contributing
-
-This is a hardware-specific project (gfx1151 today). GPU/server tests can't run in
-CI, so the workflow is: CI runs the no-GPU lint/config/JSON-schema tests
-(`uv run --no-sync pytest -m "not gpu and not server"`); hardware validation is the
-documented `docs/results/` + a local run. See `docs/troubleshooting.md` for the
-non-obvious environment constraints before you build. Open an issue for
-Radeon-dGPU (W7900) porting or ROCm 7.14.0 work.
+Thanks to Meta for Muse-Glimmer-30B and its model artifacts, vLLM and llama.cpp
+contributors for the inference implementations, and AMD TheRock/ROCm
+contributors for the `gfx1151` runtime and toolchain work.

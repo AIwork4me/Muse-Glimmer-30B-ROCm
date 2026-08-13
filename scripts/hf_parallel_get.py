@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Multi-connection resumable downloader for HuggingFace Xet-bridge files via a mirror.
+"""Multi-connection resumable downloader for Hugging Face artifacts.
 
 Why this exists
 ---------------
@@ -10,11 +10,11 @@ that sustains only ~0.2 MiB/s *per connection*, one ~50 GB shard via `hf downloa
 takes ~16 h.
 
 This script instead opens N parallel HTTP range requests against the signed
-CloudFront URL that the mirror's `/resolve` redirects to, and writes each fully
+CDN URL that the selected endpoint's `/resolve` redirects to, and writes each fully
 verified chunk straight into the final file. It handles the two things a raw
 multi-connection tool (e.g. aria2c) cannot, in this environment:
 
-  * the signed URL expires ~hourly -> it is re-resolved from the mirror on a timer
+  * the signed URL expires ~hourly -> it is re-resolved from the endpoint on a timer
     and on any 403 mid-transfer (curl sends the signed URL verbatim; urllib would
     re-encode its query string and break CloudFront's signature -> 403);
   * per-chunk progress is persisted to `<file>.parts.json`, so re-running resumes.
@@ -29,7 +29,8 @@ Usage
 
 Environment
 -----------
-  HF_ENDPOINT  mirror base (default https://hf-mirror.com)
+  HF_ENDPOINT  API/resolve base (default https://huggingface.co)
+  HF_REVISION  repository revision (default main; callers should pin it)
   NCONNS       parallel range connections (default 24)
 """
 import argparse
@@ -42,7 +43,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-DEFAULT_MIRROR = os.environ.get("HF_ENDPOINT", "https://hf-mirror.com")
+DEFAULT_ENDPOINT = os.environ.get("HF_ENDPOINT", "https://huggingface.co")
 REFRESH_SECS = 45 * 60          # re-resolve signed URL well before the ~1h expiry
 CHUNK_BYTES = 32 * 1024 * 1024  # 32 MiB per range request
 
@@ -51,23 +52,30 @@ class NeedRefresh(Exception):
     """Raised when the signed URL 403'd and must be re-resolved."""
 
 
-def resolve_and_size(mirror, repo, filename):
-    """Resolve the mirror /resolve redirect to the signed CDN URL (curl captures
+def resolve_and_size(endpoint, repo, revision, filename):
+    """Resolve an endpoint redirect to the signed CDN URL (curl captures
     the 302 Location verbatim), then probe its total size via a 1-byte range."""
-    resolve_url = f"{mirror}/{repo}/resolve/main/{filename}"
+    resolve_url = f"{endpoint.rstrip('/')}/{repo}/resolve/{revision}/{filename}"
     r = subprocess.run(
-        ["curl", "-sS", "-o", "/dev/null", "-w", "%{redirect_url}",
-         "--max-time", "40", resolve_url],
+        ["curl", "-fsS", "--retry", "5", "--retry-all-errors",
+         "--connect-timeout", "10", "-o", "/dev/null",
+         "-w", "%{redirect_url}", "--max-time", "60", resolve_url],
         capture_output=True, text=True,
     )
+    if r.returncode != 0:
+        raise RuntimeError(f"resolve failed for {filename}: {r.stderr.strip()}")
     signed = r.stdout.strip()
     if not signed.startswith("http"):
         raise RuntimeError(f"no redirect for {filename}: {r.stderr!r}")
-    hdr = subprocess.run(
-        ["curl", "-sS", "-r", "0-0", "-D", "-", "-o", "/dev/null",
-         "--max-time", "60", signed],
+    probe = subprocess.run(
+        ["curl", "-fsS", "--retry", "3", "--retry-all-errors",
+         "--connect-timeout", "10", "-r", "0-0", "-D", "-",
+         "-o", "/dev/null", "--max-time", "60", signed],
         capture_output=True, text=True,
-    ).stdout
+    )
+    if probe.returncode != 0:
+        raise RuntimeError(f"size probe failed for {filename}: {probe.stderr.strip()}")
+    hdr = probe.stdout
     m = re.search(r"content-range:\s*bytes\s+\d+-\d+/(\d+)", hdr, re.I)
     if not m:
         raise RuntimeError(f"no Content-Range probing {filename}: {hdr[:200]!r}")
@@ -82,8 +90,9 @@ def write_chunk(signed_url, offset, length, final_path):
     os.close(fd_tmp)
     try:
         r = subprocess.run(
-            ["curl", "-sS", "--fail", "--max-time", "600",
-             "-r", f"{offset}-{end}", "-o", tmp, signed_url],
+            ["curl", "-sS", "--fail", "--retry", "3", "--retry-all-errors",
+             "--connect-timeout", "10", "--max-time", "600", "-r",
+             f"{offset}-{end}", "-o", tmp, signed_url],
             capture_output=True,
         )
         if r.returncode == 22:  # HTTP >= 400 (--fail)
@@ -116,12 +125,15 @@ def tempfile_mkstemp(offset):
     return tempfile.mkstemp(prefix=f"hfpg_{offset}_", suffix=".part")
 
 
-def download_file(mirror, repo, filename, local_dir, nconns, max_bytes=None):
+def download_file(endpoint, repo, revision, filename, local_dir, nconns, max_bytes=None):
+    normalized = filename.replace("\\", "/")
+    if normalized.startswith("/") or ".." in normalized.split("/"):
+        raise ValueError(f"unsafe artifact path: {filename!r}")
     dest = os.path.join(local_dir, filename)
     os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
     meta_path = dest + ".parts.json"
 
-    signed, total = resolve_and_size(mirror, repo, filename)
+    signed, total = resolve_and_size(endpoint, repo, revision, filename)
     if max_bytes is not None:
         total = min(total, max_bytes)
     n_chunks = (total + CHUNK_BYTES - 1) // CHUNK_BYTES
@@ -151,7 +163,7 @@ def download_file(mirror, repo, filename, local_dir, nconns, max_bytes=None):
         file=sys.stderr,
     )
 
-    lock = threading.Lock()
+    lock = threading.RLock()
     state = {"signed": signed, "resolved_at": time.monotonic()}
 
     def completed_bytes():
@@ -165,7 +177,7 @@ def download_file(mirror, repo, filename, local_dir, nconns, max_bytes=None):
     def refresh_if_needed():
         with lock:
             if time.monotonic() - state["resolved_at"] > REFRESH_SECS:
-                new_url, _ = resolve_and_size(mirror, repo, filename)
+                new_url, _ = resolve_and_size(endpoint, repo, revision, filename)
                 state["signed"] = new_url
                 state["resolved_at"] = time.monotonic()
             return state["signed"]
@@ -190,9 +202,16 @@ def download_file(mirror, repo, filename, local_dir, nconns, max_bytes=None):
         return idx, 0
 
     def save_meta():
-        with open(meta_path, "w") as f:
-            json.dump({"total": total, "chunk": CHUNK_BYTES,
-                       "completed": completed}, f)
+        # Write progress atomically: interruption must not leave malformed JSON
+        # that could make a later resume trust an ambiguous partial state.
+        tmp_meta = meta_path + ".tmp"
+        with lock:
+            with open(tmp_meta, "w") as f:
+                json.dump({"total": total, "chunk": CHUNK_BYTES,
+                           "completed": completed}, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_meta, meta_path)
 
     with ThreadPoolExecutor(max_workers=nconns) as ex:
         for fut in as_completed({ex.submit(worker, i): i for i in todo}):
@@ -231,7 +250,10 @@ def main():
     ap.add_argument("repo")
     ap.add_argument("filenames", nargs="+")
     ap.add_argument("--local-dir", default=".")
-    ap.add_argument("--mirror", default=DEFAULT_MIRROR)
+    ap.add_argument("--endpoint", "--mirror", dest="endpoint",
+                    default=DEFAULT_ENDPOINT,
+                    help="Hugging Face-compatible endpoint (default: official)")
+    ap.add_argument("--revision", default=os.environ.get("HF_REVISION", "main"))
     ap.add_argument("--concurrency", type=int,
                     default=int(os.environ.get("NCONNS", "24")))
     ap.add_argument("--max-bytes", type=int, default=None,
@@ -240,8 +262,8 @@ def main():
 
     grand = 0
     for fn in args.filenames:
-        grand += download_file(args.mirror, args.repo, fn, args.local_dir,
-                               args.concurrency, args.max_bytes)
+        grand += download_file(args.endpoint, args.repo, args.revision, fn,
+                               args.local_dir, args.concurrency, args.max_bytes)
     print(f"done: {grand/1024/1024/1024:.2f} GiB", file=sys.stderr)
 
 

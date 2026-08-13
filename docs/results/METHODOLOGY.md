@@ -16,13 +16,20 @@ per-cell restarts are cheap and isolate failures.
 
 ## 1. Hardware / software manifest
 
+The machine-readable source of truth is
+[`configs/validated-stack.json`](../../configs/validated-stack.json). Exact
+model revisions, sizes, and SHA256 digests are in
+[`configs/artifact-manifest.json`](../../configs/artifact-manifest.json). The
+table below describes the historical ROCm 7.2.1 run; it is not a statement that
+every listed version is the current upstream release.
+
 | Item | Value |
 |---|---|
 | GPU | AMD Radeon 8060S, **gfx1151** (RDNA 3.5), 40 CUs |
 | Memory | 94 GiB unified LPDDR5X (~215 GB/s unified fabric) |
 | ROCm | 7.2.1 (community-verified for gfx1151) |
 | Kernel | `6.17.0-1032-oem` (≥ 6.16.9 required — fixes the UMA accounting bug) |
-| llama.cpp | **v1, build `0b1bad1`**, HIP build, `-DAMDGPU_TARGETS=gfx1151` |
+| llama.cpp | **v1, commit `0b1bad14ff204627636aeb1de22ddcd5acb859d4`**, HIP build, `-DAMDGPU_TARGETS=gfx1151` |
 | Server binary | `third_party/llama.cpp/build/bin/llama-server` |
 | Weights | `meta-models/Muse-Glimmer-30B-GGUF` — see [`matrix/gguf-manifest.md`](matrix/gguf-manifest.md) |
 
@@ -34,23 +41,22 @@ per-cell restarts are cheap and isolate failures.
 | `mmproj-kquant.gguf` | 1.3 GiB | Vision projector for the multimodal path (Study 3) |
 
 > **Fetch note (xet-backed artifacts).** `dflash-kquant.gguf` and
-> `mmproj-kquant.gguf` are Xet-backed. The hf-mirror used for the text shards
-> does **not** proxy Xet's CAS, so `hf download` via the mirror fails ("Distant
-> resource does not seem to be on huggingface.co"). Fetch these two **direct
-> from `huggingface.co` with `HF_HUB_DISABLE_XET=1`** (forces classic LFS). The
-> large text shards are *not* Xet-backed, so the mirror + parallel range
-> downloader works for them. See
+> `mmproj-kquant.gguf` are Xet-backed. The official Hugging Face endpoint is the
+> project default; `HF_ENDPOINT` may select a mirror when regional access
+> requires it. Some mirrors do **not** proxy Xet's CAS, so fetch these two from
+> `huggingface.co` with `HF_HUB_DISABLE_XET=1` if a mirror fails. See
 > [troubleshooting.md#dflash-mmproj-xet](../troubleshooting.md#dflash-mmproj-xet).
 
 ---
 
 ## 2. The 3 studies
 
-### Study 1 — Meta-comparable DFlash anchor (greedy, batch 1)
+### Study 1 — Meta-aligned DFlash anchor (greedy, batch 1)
 
-**Purpose:** place the gfx1151 row next to Meta's published RTX 5090 3.1× and
-M5 Max 1.8× rows. **Directly comparable** because Meta's RTX 5090 row is *itself
-a llama.cpp measurement* with the same K-Quant-17GB + quantized drafter.
+**Purpose:** provide the closest reproducible comparison to Meta's published
+RTX 5090 3.1× and M5 Max 1.8× rows. It aligns the disclosed controls—llama.cpp
+for the RTX row, K-Quant-17GB plus quantized drafter, greedy decoding, and batch
+1—but Meta's exact prompt corpus and full harness are not public.
 
 | Axis | Value |
 |---|---|
@@ -78,7 +84,7 @@ VmPeak, **draft acceptance** (DFlash cells only), finish_reason distribution,
 ### Study 2 — Throughput under load (temp 1.0)
 
 **Purpose:** realistic serving throughput at concurrency. **Labeled
-NOT Meta-comparable** in the docs — Meta has no batch>1 DFlash data; this is
+Original to this repository** — Meta has no batch>1 DFlash data; this is
 original throughput-under-load research.
 
 | Axis | Value |
@@ -126,7 +132,7 @@ both `--mmproj …` and the `-md … --spec-type draft-dflash --spec-draft-n-max
 block.
 
 > No c=16 vision cell (heavy, not meaningful — and c=16 + DFlash is pathological
-> in any case; see §6 below and the [warning](#6-the-c16--dflash-pathology) in
+> in any case; see §6 below and the [warning](#c16-dflash-pathology) in
 > this doc).
 
 ---
@@ -152,7 +158,7 @@ prepend the fixed test image to the user message.
 | **TPOT** | `(first→last token wall) ÷ (tokens after first)`; **per-request median** reported | inter-chunk timestamps from the stream — the core DFlash metric (it lowers per-token decode cost) |
 | **peak memory** | process **VmPeak** from `/proc/<pid>/status` (see §5 — VmHWM and rocm-smi both undercount on this APU) | polled during the cell by `scripts/capture_proc.py` |
 | **DFlash acceptance** | `acceptance_rate = accepted_draft_tokens ÷ draft_tokens`, plus `avg_accepted_per_step` | **primary: parsed from the `llama-server` stderr `draft acceptance=…` log line** (carries mean length); **secondary: `/metrics` counters** (`llamacpp:spec_decode_num_{draft_tokens,accepted_tokens,drafts}_total`), which populate when `--spec-type draft-dflash` is engaged. The two rates match exactly; only `avg_accepted_per_step` differs (different denominator). |
-| **byte-equivalence (Study 1)** | DFlash output token-identical to baseline for the same greedy prompt | `scripts/check_dflash_equiv.sh` — runs two servers, diffs `content`. Greedy spec-decode is exact, so a mismatch would be a correctness finding. |
+| **byte-equivalence (Study 1)** | DFlash canonical response message byte-identical to baseline for each greedy prompt | `scripts/check_dflash_equiv.sh` — runs two servers over the six-prompt corpus plus arithmetic smoke and compares messages. Greedy spec-decode is exact, so a mismatch would be a correctness finding. |
 | **finish_reason distribution** | count of `stop` vs `length` across reps | server response field — Meta's truncation trap: high `length` ratio ⇒ wrong output / context budget. Reported so a reader can see the truncation risk. |
 | **power/temp** | GPU temp (°C) during run | `rocm-smi --showtemp` (these ARE valid on Strix Halo, unlike VRAM). Power key not exposed for this APU; `power_w` left null. |
 
@@ -185,20 +191,24 @@ Pathological (non-completing) cells carry `pathological: true` plus a
 
 ---
 
-## 5. The memory methodology — **trust VmPeak, not rocm-smi or VmHWM**
+<a id="memory-methodology"></a>
+
+## 5. Memory methodology — the process mapped-memory envelope
 
 This is the most misread column on Strix Halo, so it gets its own section.
 
 | Source | What it measures | On this APU |
 |---|---|---|
-| **VmPeak** (`/proc/<pid>/status`) | peak virtual memory size of the `llama-server` process | **the real footprint (~24–32 GiB)** — the GGUF is mmap'd into the process address space and GPU-offloaded; VmPeak sees the full mapping |
+| **VmPeak** (`/proc/<pid>/status`) | peak virtual address-space size of the `llama-server` process | **most useful process-level mapped-memory envelope here (~24–32 GiB)** — it includes the mmap'd GGUF and GPU-offload mappings, but is not a direct measurement of resident physical memory |
 | `VmHWM` / `VmRSS` | peak resident *physical* pages owned by the process | **undercounts (1–10 GiB)** — mmap'd pages are paged in/out by the kernel and many GPU-offloaded pages are not counted as resident |
 | `rocm-smi --showmeminfo vram` | the ~32 GiB **dedicated VRAM carve-out** only | **misleading (~1 GiB)** — the carve-out counter only ticks for buffers allocated through the carve-out path; mmap'd + unified-host-visible GPU buffers don't increment it |
 
-**Therefore: every published footprint number in this matrix is VmPeak.** The
-renderer (`scripts/render_matrix.py`) emits VmPeak as the footprint column.
-VmHWM and rocm-smi VRAM are kept in the cell JSON for transparency but are not
-the headline number.
+**Therefore: every published footprint number in this matrix is labeled
+VmPeak.** The renderer (`scripts/render_matrix.py`) emits VmPeak as the
+footprint column. VmHWM and rocm-smi VRAM are kept in the cell JSON for
+transparency but are not the headline number. VmPeak is useful for relative
+deltas in this workload; it must not be interpreted as literal resident DRAM
+use.
 
 Cross-checks that VmPeak is sane:
 
@@ -211,13 +221,20 @@ Cross-checks that VmPeak is sane:
 - Aggregate concurrency raises VmPeak via KV cache (17gb c=1 24.4 → c=16 30.3;
   dynamic c=1 27.2 → c=16 38.4).
 
+Future runs should add `/proc/<pid>/smaps_rollup` (RSS/PSS), system
+`MemAvailable` deltas, cgroup accounting where available, and relevant
+GTT/unified-memory counters. Those measurements were not captured for the
+historical matrix and are not reconstructed here.
+
 ---
+
+<a id="c16-dflash-pathology"></a>
 
 ## 6. The c=16 + DFlash pathology
 
 > **Headline user-facing warning. Do NOT combine DFlash with `-np 16` (high
 > concurrency). It is pathologically slow — >1000× slower per-request than the
-> c=16 baseline.** See [benchmark.md warning block](benchmark.md#c16--dflash-do-not-use)
+> c=16 baseline.** See [benchmark.md warning block](benchmark.md#c16-dflash-do-not-use)
 > for the public-facing write-up and best-practice table, and
 > [troubleshooting.md#dflash-c16-pathological](../troubleshooting.md#dflash-c16-pathological).
 
@@ -269,6 +286,8 @@ Both c=16 DFlash cells are recorded as evidence-based non-completions
 
 ---
 
+<a id="dflash-enablement"></a>
+
 ## 8. DFlash enablement — the silent no-op gotcha
 
 `llama-server`'s `--spec-type` **defaults to `none`**. Passing only
@@ -300,24 +319,26 @@ accepted tokens are by definition the argmax the target would have produced, so
 DFlash-on and DFlash-off must emit the identical token sequence. A mismatch is a
 correctness finding.
 
-Check: [`scripts/check_dflash_equiv.sh`](../../scripts/check_dflash_equiv.sh)
-runs two `llama-server` instances (baseline vs +DFlash with
-`--spec-type draft-dflash --spec-draft-n-max 16`) on the fixed prompt
-*"What is 17 * 23? Reply with just the number."* (`temp=0 seed=0
-reasoning_strength=high`, 17gb weight) and diffs the `content` field.
+The current [`scripts/check_dflash_equiv.sh`](../../scripts/check_dflash_equiv.sh)
+runs baseline and DFlash servers over all six Study 1 prompts, plus the original
+arithmetic smoke prompt, and compares canonical response-message bytes. It also
+requires non-zero DFlash draft activity so a silent no-op cannot pass.
 
-**Result: PASS** — both emit `'391'` (17×23 = 391, correct).
-The check script itself was the subject of fix commit `290e596`: an earlier
-version omitted `--spec-type` and so trivially passed against a no-drafting
-server. The current version engages spec-decode, and the pass is real.
+**Recorded historical result:** the original arithmetic smoke check passed—both
+servers emitted `'391'` (17×23 = 391, correct). The check script was the subject
+of fix commit `290e596`: an earlier version omitted `--spec-type` and therefore
+passed trivially against a no-drafting server. The expanded six-prompt harness
+is now available, but its result must not be published until it is run on the
+validated GPU stack.
 
 ---
 
 ## 10. Known limitations & honest caveats
 
 1. **Unified ~215 GB/s fabric vs RTX 5090 GDDR7.** Absolute tok/s will differ
-   across hardware; only the **speedup ratio + methodology** are directly
-   comparable to Meta. We report ratios alongside absolute numbers.
+   across hardware. The speedup ratio is the closest methodology-aligned
+   comparison to Meta, subject to the unpublished-prompt limitation above. We
+   report ratios alongside absolute numbers.
 2. **Reasoning model tok/s measures raw decode, not per-turn answer latency.**
    Muse-Glimmer emits chain-of-thought in the `reasoning` channel first; a real
    chat turn is longer than `tokens / tok_s`. The `reasoning` tokens are
@@ -332,10 +353,10 @@ server. The current version engages spec-decode, and the pass is real.
 4. **`rocm-smi` VRAM is not the footprint** on Strix Halo — see §5.
 5. **`power_w` is null** — the APU does not expose the relevant rocm-smi key;
    `temp_c` is captured (58–63 °C, no throttling).
-6. **No 7.14.0 comparison here.** This matrix is **ROCm 7.2.1 only**. ROCm
-   7.14.0 (in which gfx1151 is "officially" supported) is a separate, gated
-   Part 2 plan that re-runs the identical matrix with only ROCm differing. The
-   7.2.1 data is committed and immutable before any 7.14.0 work begins.
+6. **No completed 7.14.0 comparison here.** This matrix is **ROCm 7.2.1 only**.
+   ROCm 7.14.0 is a separate validation track. Partial raw cells, if present,
+   are not a completed matrix and must not be used for headline conclusions;
+   see [`rocm-7.14/README.md`](rocm-7.14/README.md).
 7. **`llama-bench` cross-check is non-DFlash.** `llama-bench` has no `-md`
    support in this build, so the optional cross-check (`matrix/llama-bench.json`,
    pp512 / tg128) validates only the model-level baseline decode, not spec-decode.
@@ -351,7 +372,7 @@ server. The current version engages spec-decode, and the pass is real.
 To reproduce a cell:
 
 ```bash
-cd /home/amd/Desktop/muse-rocm
+cd /path/to/Muse-Glimmer-30B-ROCm
 # one cell, e.g. study1 17gb DFlash:
 bash scripts/gguf-bench-cell.sh study1 17gb dflash  # emits cell-*.json to matrix/
 
