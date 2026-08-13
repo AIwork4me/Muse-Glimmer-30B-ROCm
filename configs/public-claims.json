@@ -15,6 +15,7 @@
   "forward_validation": {
     "rocm": "7.14.0",
     "status": "partially-validated",
+    "recommended": true,
     "manifest": "configs/rocm-7.14-gguf-validation.json",
     "tracks": [
       {
@@ -26,7 +27,7 @@
       {
         "name": "BF16/vLLM",
         "status": "evaluated-not-pursued",
-        "scope": "evaluated by rocBLAS BF16-GEMM proxy (7.14 == 7.2.1, no compute gain); not pursued - vLLM/BF16 stays on the 7.2.1 reference",
+        "scope": "deferred: single-user scenarios use the llama.cpp path; the 7.14 vLLM perf question was evaluated by rocBLAS BF16-GEMM proxy (7.14 == 7.2.1, no compute gain), so vLLM/BF16 stays on the 7.2.1 reference and is not prioritized",
         "evidence": "scripts/bench_rocblas_gemm.cpp"
       }
     ]

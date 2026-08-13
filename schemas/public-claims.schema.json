@@ -23,10 +23,11 @@
     "forward_validation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rocm", "status", "manifest", "tracks"],
+      "required": ["rocm", "status", "recommended", "manifest", "tracks"],
       "properties": {
         "rocm": {"const": "7.14.0"},
         "status": {"const": "partially-validated"},
+        "recommended": {"const": true},
         "manifest": {"const": "configs/rocm-7.14-gguf-validation.json"},
         "tracks": {
           "type": "array",

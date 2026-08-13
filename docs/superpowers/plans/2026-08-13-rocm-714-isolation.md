@@ -63,7 +63,7 @@ installation remained intact.
 ### S1 — Install 7.14.0 to `~/rocm-7.14.0`
 The executed run used the `tarball-multi-arch/` archive and extracted its root
 without `--strip-components`. The verified reproduction commands now live in
-[`docs/strix-halo-setup.md`](../../strix-halo-setup.md#alternative-rocm-7140).
+[`docs/strix-halo-setup.md`](../../strix-halo-setup.md#rocm-7140-install).
 **Gate (must pass before S3):**
 - `~/rocm-7.14.0/bin/rocminfo | grep gfx1151` → lists gfx1151.
 - `~/rocm-7.14.0/bin/hipcc --version` → reports 7.14.0 (HIP version).

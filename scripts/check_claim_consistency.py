@@ -82,22 +82,21 @@ def validation_tracks(claims: dict, forward_manifest: dict) -> str:
     scope = forward_manifest["scope"]
     platform = forward_manifest["platform"]
     return (
-        f"- **Validated historical/reference stack:** ROCm {reference['rocm']} "
-        "host toolchain plus the\n"
-        "  recorded TheRock runtime. Existing benchmark JSON is immutable evidence.\n"
-        f"- **ROCm {forward['rocm'][:4]} gfx1151 track:** the reduced "
-        "**GGUF/llama.cpp matrix is\n"
-        f"  project-validated** on {platform['hardware'].removeprefix('AMD ')},\n"
-        f"  {scope['completed_cells']} of {scope['planned_cells']} planned cells; "
-        "the four\n"
-        "  `np=16` cells were intentionally deferred. The BF16/vLLM track was "
-        "**evaluated and is\n"
-        "  not pursued** — a rocBLAS BF16-GEMM proxy showed no 7.14 compute gain "
-        "over 7.2.1,\n"
-        "  so vLLM/BF16 stays on the ROCm 7.2.1 reference. ROCm 7.14 is not presented "
-        "as a globally\n"
-        f"  validated replacement for the historical stack. No ROCm {reference['rocm']} "
-        "result is relabeled or overwritten."
+        f"- **ROCm {forward['rocm'][:4]} gfx1151 (recommended default):** the reduced "
+        "**GGUF/llama.cpp\n"
+        f"  matrix is project-validated** on {platform['hardware'].removeprefix('AMD ')},\n"
+        f"  {scope['completed_cells']} of {scope['planned_cells']} planned cells; the "
+        "four `np=16` cells\n"
+        "  were deferred. The BF16/vLLM track was **evaluated and is not pursued** "
+        "(rocBLAS BF16-GEMM\n"
+        "  proxy: no 7.14 compute gain); vLLM/BF16 stays on the 7.2.1 reference, so "
+        "ROCm 7.14 is not\n"
+        "  presented as a globally validated replacement for the historical stack.\n"
+        f"- **ROCm {reference['rocm']} (historical reference, supplementary):** the "
+        "full validated stack —\n"
+        "  the complete benchmark matrix, the vLLM-vs-llama.cpp head-to-head, and "
+        "llama-bench — is\n"
+        "  preserved as immutable evidence. No result is relabeled or overwritten."
     )
 
 
@@ -146,6 +145,8 @@ def check() -> None:
     require(forward["rocm"] == "7.14.0" and
             forward["status"] == "partially-validated",
             "ROCm 7.14 must remain scoped rather than globally validated")
+    require(forward.get("recommended") is True,
+            "ROCm 7.14 must be marked as the recommended default track")
     require(stack["benchmark_evidence"]["forward_validation_manifest"] ==
             forward["manifest"],
             "validated stack points to the wrong forward-validation manifest")

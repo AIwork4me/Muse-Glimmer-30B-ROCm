@@ -18,22 +18,25 @@ If you are below the floor, upgrade your kernel before going further — no amou
 of ROCm config recovers the missing memory. See
 [troubleshooting.md#uma-bug](troubleshooting.md#uma-bug).
 
-## 2. ROCm tracks
+## 2. ROCm — 7.14.0 (recommended default)
 
-The published benchmark is historical evidence from **ROCm 7.2.1**. ROCm
-**7.14.0** provides AMD's official gfx1151 distribution; this repository keeps
-its scoped GGUF/llama.cpp validation separate so new evidence cannot overwrite
-the reference matrix. See
+**ROCm 7.14.0** is AMD's official gfx1151 distribution and this project's
+recommended default. The historical benchmark evidence was recorded on **ROCm
+7.2.1** (the fully-validated reference, kept as supplementary); the 7.14
+GGUF/llama.cpp matrix reproduces it within noise. See
 [`docs/results/README.md`](results/README.md) for the status and evidence
 boundary.
 
 ```bash
-cat /opt/rocm/.info/version     # 7.2.x
-rocminfo | grep -i gfx1151      # must list gfx1151
+bash scripts/install-rocm-7.14.sh              # installs ~/rocm-7.14.0 (official gfx1151)
+~/rocm-7.14.0/bin/rocminfo | grep -i gfx1151   # must list gfx1151
+# System /opt/rocm (7.2.1) is the historical reference; both coexist side-by-side.
 ```
 
-Want the official path instead? See
-[§Alternative: ROCm 7.14.0](#alternative-rocm-7140) below.
+Manual install details (size/SHA256 verification, staged extraction):
+[§ROCm 7.14.0 manual install](#rocm-7140-install) below. The system `/opt/rocm`
+(7.2.1) needs no special install; see [docs/results/README.md](results/README.md)
+for the historical-reference boundary.
 
 ## 3. UMA carve-out / VRAM pool
 
@@ -59,13 +62,14 @@ command -v uv || curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ```bash
 uv sync                       # create .venv, pull TheRock gfx1151 torch
-bash scripts/00-check-env.sh  # asserts ROCm 7.2.x · kernel ≥6.16.9 · gfx1151 · ≥60 GiB pool
+bash scripts/00-check-env.sh  # asserts ROCm 7.14.x/7.2.x · kernel ≥6.16.9 · gfx1151 · ≥60 GiB pool
 uv run pytest tests/test_env_torch.py tests/test_env.py -v -m gpu
 ```
 
 Once that is green, continue with the vLLM build (`scripts/01-build-vllm.sh`).
 
-## Alternative: ROCm 7.14.0
+<a id="rocm-7140-install"></a>
+## ROCm 7.14.0 — manual install details
 
 ROCm 7.14.0 was published on **2026-07-15** and provides an official AMD gfx1151
 distribution. AMD's release notes list several gfx1151 Ryzen AI MAX PRO SKUs,
