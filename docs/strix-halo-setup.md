@@ -63,10 +63,16 @@ Once that is green, continue with the vLLM build (`scripts/01-build-vllm.sh`).
 
 ## Alternative: ROCm 7.14.0
 
-If you want AMD's officially-supported ROCm for gfx1151, install **7.14.0**
-instead of 7.2.1 and re-point the TheRock index to the matching wheel line. The
-adaptations in this project (BF16, `FLASH_ATTN`, source-built vLLM, AITER off)
-are ROCm-version-independent; only the torch wheel pin in `pyproject.toml`
-changes. Not tested here — recorded as a forward path.
+If you want AMD's officially-supported ROCm for gfx1151, use **7.14.0** (released
+2026-07-16; first ROCm with official gfx1151 APU support). Note: 7.14.0 ships via
+**TheRock** (the new modular build system) — the legacy `repo.radeon.com/rocm/apt/`
+repo tops out at **7.2.4**, so `apt` will not find 7.13/7.14 there. Install via the
+TheRock release/prefix and re-point the torch wheel pin in `pyproject.toml` to the
+matching line. The adaptations in this project (BF16, `TRITON_ATTN`, source-built
+vLLM, AITER off) are ROCm-version-independent; only the wheel pin changes. Not
+tested here yet — recorded as the forward path. Caveat: official support ≠ bug-free;
+open Strix Halo unified-memory issues
+([#6370](https://github.com/ROCm/ROCm/issues/6370), [#6165](https://github.com/ROCm/ROCm/issues/6165))
+persist and can affect stability under sustained load.
 
 [uma]: https://github.com/ROCm/ROCm/issues/5444

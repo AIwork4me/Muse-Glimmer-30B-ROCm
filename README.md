@@ -223,8 +223,10 @@ Full delta table with the *why* + memory math: [`docs/adaptation.md`](docs/adapt
 
 ✅ vLLM (BF16, `TRITON_ATTN`) · ✅ llama.cpp GGUF (Q4 kquant) · ✅ DFlash on llama.cpp
 (2.2–2.4×, byte-equivalent) · ✅ full benchmark matrix (Studies 1/2/3) · ✅ vision path
-loaded + measured · ✅ CI-safe tests. 🚧 Radeon dGPU (W7900) support · 🚧 ROCm 7.14.0
-isolated comparison (separate gated plan; current 7.2.1 is proven).
+loaded + measured · ✅ CI-safe tests. 🚧 Radeon dGPU (W7900) support · ⏸ ROCm 7.14.0
+isolated comparison — 7.14.0 (released 2026-07-16, first official gfx1151 APU support)
+ships via **TheRock**, not the legacy apt repo (which tops at 7.2.4); side-by-side plan,
+non-destructive to the proven 7.2.1 stack. See [`docs/strix-halo-setup.md`](docs/strix-halo-setup.md).
 
 ## License
 

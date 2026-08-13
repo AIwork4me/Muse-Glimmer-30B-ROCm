@@ -7,8 +7,10 @@ validated on real gfx1151 hardware, benchmarked head-to-head, and committed to
 via `--mmproj`** — are now validated on the llama.cpp path on branch
 `feat/llamacpp-dflash-benchmark`, with a 3-study benchmark matrix
 (Study 1 / 2 / 3) committed as immutable raw per-cell JSON
-(`docs/results/matrix/cell-*.json`). **ROCm 7.14.0 remains a separate, gated
-Part 2 plan** — see §8.
+(`docs/results/matrix/cell-*.json`). **ROCm 7.14.0** (released 2026-07-16; first
+official gfx1151 APU support; ships via **TheRock**, not the legacy apt repo which
+tops at 7.2.4) is a separate **side-by-side** comparison plan — feasibility
+confirmed, not yet run; see §8.
 
 This document is the fast-path orientation for anyone picking the project up.
 Authoritative details live in the linked docs; this is the map.
@@ -253,13 +255,20 @@ These are explicit non-goals or deferred items, not bugs:
 - **Vision via llama.cpp — DONE.** Study 3 (5 cells) confirms `--mmproj` loads +
   answers, with a memory delta matching Meta's envelope. See
   [`docs/results/benchmark.md` Study 3](docs/results/benchmark.md#study-3--vision-axis-temp-10---mmproj-test-image).
-- **ROCm 7.14.0 path — separate, gated Part 2 plan.** gfx1151 is "officially"
-  supported at 7.14.0; this project uses 7.2.1 (community-verified). 7.14.0 is
-  documented as an alternative (`docs/strix-halo-setup.md`). The 7.2.1 matrix
-  data is committed and immutable on `feat/llamacpp-dflash-benchmark`, so any
-  7.14.0 work begins with a feasibility probe (can it install side-by-side on
-  this host without removing 7.2.1?) and then re-runs the identical matrix with
-  only ROCm differing. See spec §9 (P-D).
+- **ROCm 7.14.0 path — separate, side-by-side Part 2 plan (feasibility confirmed).**
+  7.14.0 was **released 2026-07-16** as the first ROCm with **official gfx1151 APU
+  support** (Ryzen AI MAX+ PRO 495/395, RDNA 3.5). It ships via **TheRock** (the new
+  modular build system) — *not* the legacy `repo.radeon.com/rocm/apt/` repo, which
+  tops out at 7.2.4 (so `apt` will not find 7.13/7.14). This project already uses
+  TheRock for gfx1151 PyTorch (`…rocm7.13.0a…`), so a 7.14.0 stack is the natural
+  next step. The plan: install TheRock 7.14.0 to its own prefix (non-destructive —
+  the 7.2.1 apt install + the immutable `master` matrix stay intact), rebuild
+  `llama.cpp` against it, and re-run the identical matrix with only ROCm differing.
+  **Caveat:** official ≠ bug-free — open APU unified-memory issues persist
+  ([#6370](https://github.com/ROCm/ROCm/issues/6370) GTT billing gap,
+  [#6165](https://github.com/ROCm/ROCm/issues/6165) hard freezes under sustained
+  inference) needing kernel `amdgpu`/TTM work; watch stability under load. See
+  spec §9 (P-D) and `docs/strix-halo-setup.md`.
 - **No git remote / PR** — the repo is local-only. `master` holds the v1
   deliverable; `feat/llamacpp-dflash-benchmark` holds the DFlash + vision matrix
   (this branch). If a GitHub remote is added, the `ci.yml` workflow will run the
