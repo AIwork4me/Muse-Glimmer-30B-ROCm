@@ -1,10 +1,13 @@
 # Changelog
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-No release has been tagged yet; entries remain under **Unreleased** until the
-release gates are complete.
+No release has been tagged yet. The v0.1.0 entry was dated after its initial
+local and hosted release-candidate gates passed; tagging and publishing remain
+maintainer-controlled.
 
 ## Unreleased
+
+## [0.1.0] - 2026-08-14
 
 ### Added
 
