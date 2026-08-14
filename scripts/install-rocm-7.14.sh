@@ -67,18 +67,30 @@ mkdir -p "$PARENT"
 #     extracted size, so this floor is derived from the validated install
 #     (an 8.3 GiB ~/rocm-7.14.0 tree from the 1.6 GiB tarball), rounded up to
 #     9 GiB to stay honest across patch releases.
+# When both paths sit on ONE filesystem, the true peak is the archive and the
+# extracted tree coexisting during tar, so the floors are combined and
+# checked once against that mount (two separate checks against the same
+# mount would undercount the shared space). Same pattern as
+# gguf-quickstart.sh's same-mount combine.
 EXTRACTED_FLOOR_BYTES=$((9 * 1024 * 1024 * 1024))
 
+fs_of_dir() {  # fs_of_dir <dir> -> "<mount> <avail_bytes>" of the filesystem holding <dir>
+    local dir="$1"
+    # Walk up to the nearest existing ancestor: the archive's parent (a
+    # custom TMPDIR or ROCM714_ARCHIVE location) may not exist yet.
+    while [ ! -d "$dir" ]; do
+        dir="$(dirname "$dir")"
+    done
+    df -Pk "$dir" | awk 'NR==2 {print $NF, $4 * 1024}'
+}
+
 require_available_bytes() {  # require_available_bytes <dir> <floor_bytes> <what> <remedy>
-    local dir="$1" floor_bytes="$2" what="$3" remedy="$4"
+    local dir="$1" floor_bytes="$2" what="$3" remedy="$4" mount avail_bytes
     if [ ! -d "$dir" ]; then
         echo "ERROR: directory $dir does not exist; create it and rerun." >&2
         exit 1
     fi
-    local df_line avail_bytes mount
-    df_line="$(df -Pk "$dir" | awk 'NR==2')"
-    avail_bytes="$(( $(printf '%s\n' "$df_line" | awk '{print $4}') * 1024 ))"
-    mount="$(printf '%s\n' "$df_line" | awk '{print $NF}')"
+    read -r mount avail_bytes <<<"$(fs_of_dir "$dir")"
     if [ "$avail_bytes" -lt "$floor_bytes" ]; then
         printf 'ERROR: not enough disk space for %s: filesystem %s (holding %s) has %s GiB available, need at least %s GiB.\n' \
             "$what" "$mount" "$dir" \
@@ -89,12 +101,19 @@ require_available_bytes() {  # require_available_bytes <dir> <floor_bytes> <what
     fi
 }
 
-require_available_bytes "$(dirname "$ARCHIVE")" "$SIZE" \
-    "the ROCm $ROCM_VER archive download (staged at $ARCHIVE)" \
-    "Free space on that filesystem, or set TMPDIR (or ROCM714_ARCHIVE) to a path on a larger filesystem, then rerun."
-require_available_bytes "$PARENT" "$EXTRACTED_FLOOR_BYTES" \
-    "the extracted ROCm tree at $PREFIX" \
-    "Free space on that filesystem, or set ROCM714_PREFIX to a path on a larger filesystem, then rerun."
+ARCHIVE_DIR="$(dirname "$ARCHIVE")"
+if [ "$(fs_of_dir "$ARCHIVE_DIR" | awk '{print $1}')" = "$(fs_of_dir "$PARENT" | awk '{print $1}')" ]; then
+    require_available_bytes "$ARCHIVE_DIR" "$((SIZE + EXTRACTED_FLOOR_BYTES))" \
+        "the ROCm $ROCM_VER archive download and the extracted tree at $PREFIX" \
+        "Free space on that filesystem, or set TMPDIR (or ROCM714_ARCHIVE) and ROCM714_PREFIX to paths on a larger filesystem, then rerun."
+else
+    require_available_bytes "$ARCHIVE_DIR" "$SIZE" \
+        "the ROCm $ROCM_VER archive download (staged at $ARCHIVE)" \
+        "Free space on that filesystem, or set TMPDIR (or ROCM714_ARCHIVE) to a path on a larger filesystem, then rerun."
+    require_available_bytes "$PARENT" "$EXTRACTED_FLOOR_BYTES" \
+        "the extracted ROCm tree at $PREFIX" \
+        "Free space on that filesystem, or set ROCM714_PREFIX to a path on a larger filesystem, then rerun."
+fi
 
 echo "Downloading ROCm $ROCM_VER gfx1151 tarball (~$((SIZE/1024/1024)) MiB) ..."
 echo "  $URL"

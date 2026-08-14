@@ -103,26 +103,36 @@ def install_fake_curl(bindir: Path, source: Path) -> None:
     curl.chmod(0o755)
 
 
-def install_fake_df(bindir: Path, avail_kb_by_marker: dict[str, int], default_kb: int) -> None:
+GENEROUS_DF_KB = 200 * 1024 * 1024  # 200 GiB reported free, host-independent
+
+
+def install_fake_df(
+    bindir: Path,
+    arms: list[tuple[str, str, int]] | None = None,
+    default: tuple[str, int] = ("/", GENEROUS_DF_KB),
+) -> None:
     """A df(1) stub reporting canned availability, keyed by path markers.
 
     The real installer parses `df -Pk <dir>`; this stub emits the same POSIX
-    shape with an Available column chosen by which path df was asked about.
+    shape with a mount and an Available column chosen by which path df was
+    asked about, so same-mount and separate-mount scenarios can be staged
+    (mirrors the quickstart harness's install_fake_df).
     """
-    arms = [
+    lines = [
         "#!/bin/sh",
-        'avail=' + str(default_kb),
+        f"mount={shlex.quote(default[0])}",
+        f"avail={default[1]}",
         'case "$*" in',
     ]
-    for marker, kb in avail_kb_by_marker.items():
-        arms.append(f"  *{marker}*) avail={kb} ;;")
-    arms += [
+    for marker, mount, avail_kb in arms or []:
+        lines.append(f"  *{marker}*) mount={shlex.quote(mount)}; avail={avail_kb} ;;")
+    lines += [
         "esac",
         "printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'",
-        'printf \'fakefs 1 1 %s 99%% /fake\\n\' "$avail"',
+        'printf \'fakefs 1 1 %s 99%% %s\\n\' "$avail" "$mount"',
     ]
     df = bindir / "df"
-    df.write_text("\n".join(arms) + "\n", encoding="utf-8")
+    df.write_text("\n".join(lines) + "\n", encoding="utf-8")
     df.chmod(0o755)
 
 
@@ -265,8 +275,6 @@ def test_script_version_tail_is_not_a_pipe() -> None:
 # F-02: the verified archive must not silently stay behind in /tmp
 # ---------------------------------------------------------------------------
 
-GENEROUS_DF_KB = 200 * 1024 * 1024  # 200 GiB reported free, host-independent
-
 
 @needs_real_preflight_space
 def test_verified_archive_deleted_with_a_cleanup_line_after_success(
@@ -292,7 +300,7 @@ def test_failed_verification_keeps_the_archive_for_inspection(
 ) -> None:
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    install_fake_df(bindir, {}, GENEROUS_DF_KB)  # keep the preflight out of it
+    install_fake_df(bindir)  # generous everywhere: keep the preflight out of it
     tarball = make_tarball(tmp_path)
     install_fake_curl(bindir, tarball)
     # Right size, wrong bytes: size check passes, SHA256 must fail.
@@ -323,8 +331,13 @@ def test_insufficient_archive_space_refuses_before_downloading(
     tmpdir.mkdir()
     out = tmp_path / "out"
     out.mkdir()
-    # 1 GiB free where the archive would land, plenty where the tree would.
-    install_fake_df(bindir, {"*/tmpdir*": ONE_GIB_KB}, GENEROUS_DF_KB)
+    # 1 GiB free where the archive would land, plenty where the tree would;
+    # distinct mounts so each floor is judged on its own filesystem.
+    install_fake_df(
+        bindir,
+        [("tmpdir", "/fakearch", ONE_GIB_KB)],
+        ("/fakeprefix", GENEROUS_DF_KB),
+    )
     tarball = make_tarball(tmp_path)
     install_fake_curl(bindir, tarball)
     # Manifest floor of 5 GiB for the archive filesystem.
@@ -354,8 +367,13 @@ def test_insufficient_prefix_space_refuses_before_downloading(
     tmpdir.mkdir()
     out = tmp_path / "out"
     out.mkdir()
-    # Plenty for the small stub archive, only 4 GiB for the extracted tree.
-    install_fake_df(bindir, {"*/out*": 4 * ONE_GIB_KB}, GENEROUS_DF_KB)
+    # Plenty for the small stub archive, only 4 GiB for the extracted tree;
+    # distinct mounts so each floor is judged on its own filesystem.
+    install_fake_df(
+        bindir,
+        [("out", "/fakeprefix", 4 * ONE_GIB_KB)],
+        ("/fakearch", GENEROUS_DF_KB),
+    )
     tarball = make_tarball(tmp_path)
     install_fake_curl(bindir, tarball)
     manifest = write_manifest(tmp_path, tarball)
@@ -373,6 +391,44 @@ def test_insufficient_prefix_space_refuses_before_downloading(
     )
     assert "4.0 GiB" in result.stderr
     assert "ROCM714_PREFIX" in result.stderr, "must offer the prefix escape hatch"
+    assert "Downloading" not in result.stdout
+    assert not archive.exists()
+
+
+def test_same_mount_below_combined_floor_refuses_before_downloading(
+    tmp_path: Path,
+) -> None:
+    """F-03 backport (final-review follow-up): when the archive and the
+    prefix sit on one filesystem, the true peak is the archive and the
+    extracted tree coexisting during tar. Two separate checks against the
+    same mount would each pass while the install still dies mid-extract."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    tmpdir = tmp_path / "tmpdir"
+    tmpdir.mkdir()
+    out = tmp_path / "out"
+    out.mkdir()
+    # One shared mount with 10 GiB: above either floor alone (5 GiB archive,
+    # 9 GiB tree), below the 14 GiB coexistence peak.
+    install_fake_df(bindir, default=("/oneshare", 10 * ONE_GIB_KB))
+    tarball = make_tarball(tmp_path)
+    install_fake_curl(bindir, tarball)
+    manifest = write_manifest(tmp_path, tarball, size_bytes=5 * 1024**3)
+    archive = tmpdir / "archive.tar.gz"
+
+    result = run_installer(
+        tmp_path, manifest=manifest, prefix=out / "rocm", archive=archive
+    )
+
+    assert result.returncode == 1
+    assert "not enough disk space" in result.stderr
+    assert "14.0 GiB" in result.stderr, (
+        "must state the combined archive+tree floor, not either floor alone"
+    )
+    assert "10.0 GiB" in result.stderr
+    assert str(tmpdir) in result.stderr, "the shared mount is named via its path"
+    for hatch in ("TMPDIR", "ROCM714_ARCHIVE", "ROCM714_PREFIX"):
+        assert hatch in result.stderr, f"combined refusal must offer {hatch}"
     assert "Downloading" not in result.stdout
     assert not archive.exists()
 
@@ -445,7 +501,7 @@ def test_size_mismatch_prints_expected_actual_bytes_and_action(
 ) -> None:
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    install_fake_df(bindir, {}, GENEROUS_DF_KB)
+    install_fake_df(bindir)
     tarball = make_tarball(tmp_path)
     install_fake_curl(bindir, tarball)
     wrong_size = tarball.stat().st_size + 12345
@@ -467,7 +523,7 @@ def test_sha_mismatch_prints_expected_actual_hash_and_action(
 ) -> None:
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    install_fake_df(bindir, {}, GENEROUS_DF_KB)
+    install_fake_df(bindir)
     tarball = make_tarball(tmp_path)
     install_fake_curl(bindir, tarball)
     expected_sha = "0" * 64
@@ -490,7 +546,7 @@ def test_missing_hipcc_after_extract_names_state_and_action(
 ) -> None:
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    install_fake_df(bindir, {}, GENEROUS_DF_KB)
+    install_fake_df(bindir)
     tarball = make_tarball(tmp_path, with_hipcc=False)
     install_fake_curl(bindir, tarball)
     manifest = write_manifest(tmp_path, tarball)
