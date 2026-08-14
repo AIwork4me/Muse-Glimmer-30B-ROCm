@@ -22,6 +22,18 @@ Current status:
 | MI300X / MI355X (`CDNA`) | 📘 **Upstream recipe** |
 <!-- END GENERATED: hardware-matrix -->
 
+## BIOS / UMA memory sizing
+
+The validated host exposes an 80 GiB GPU-visible unified-memory pool to ROCm.
+That 80 GiB is the checker's **warning boundary, not a minimum** — the hard
+GPU-visible floor for the default GGUF path is the ~15.6 GiB model size. Hosts
+configured below that boundary are not invalid: compare your pool against the
+thresholds `scripts/00-check-env.sh` prints next to the measured number
+(GPU-visible memory, explicitly not disk) and the
+[README requirements](../README.md#requirements-and-operating-notes). A pool
+far smaller than your BIOS UMA setting is the
+[uma-bug](troubleshooting.md#uma-bug) kernel issue, not sizing.
+
 ## Submission requirements
 
 Open the **Hardware validation** issue and attach or link a durable artifact

@@ -17,6 +17,8 @@ Every gotcha we hit, as **symptom → cause → fix**. Skim the left column.
 | `dflash-kquant.gguf` / `mmproj-kquant.gguf` download fails | [#dflash-mmproj-xet](#dflash-mmproj-xet) |
 | rocm-smi shows ~1 GiB but model is 16+ GiB | [#memory-footprint-apu](#memory-footprint-apu) |
 | `finish_reason: length` / empty `content` | [#reasoning-length](#reasoning-length) |
+| gguf-quickstart refuses: llama.cpp has tracked changes | [#dirty-llama-cpp-checkout](#dirty-llama-cpp-checkout) |
+| `required command not found: git/cmake/curl/python3` | [#missing-tool](#missing-tool) |
 
 ---
 
@@ -155,6 +157,85 @@ scripts). Never drop it. If you wiped vLLM, re-run `scripts/01-build-vllm.sh`.
 [invdev]: https://github.com/ROCm/ROCm/issues/4909
 [chunked]: https://github.com/vllm-project/vllm/issues/5013
 
+## dirty-llama-cpp-checkout
+
+**Symptom:** `scripts/gguf-quickstart.sh` (or `scripts/quickstart.sh`, which
+execs it) stops before building with:
+
+```
+ERROR: third_party/llama.cpp has uncommitted tracked changes;
+```
+
+**Cause:** the quickstart never discards your work. Before it switches
+llama.cpp commits — or reuses an already-checked-out one — it runs the
+dirty-tree guard and refuses while tracked files are modified: local patches,
+a hand-applied fix, a stray edit. The cold-start false positive that used to
+fire on *every* fresh clone (an index-less `--no-checkout` clone misread as
+"all 3419 files deleted") is fixed; if you see this error now, the checkout
+really is dirty. Confirm with:
+
+```bash
+git -C third_party/llama.cpp status --porcelain
+```
+
+**Fix:** keep your work or discard it, then rerun. To keep it:
+
+```bash
+git -C third_party/llama.cpp stash        # restore later: git stash pop
+bash scripts/gguf-quickstart.sh
+```
+
+To discard the changes and take the selected commit:
+
+```bash
+git -C third_party/llama.cpp checkout -- .
+bash scripts/gguf-quickstart.sh
+```
+
+If the checkout was interrupted mid-switch (e.g. Ctrl-C while the script was
+changing commits) and `checkout -- .` does not settle the tree, force the
+selected ref — the `llama.cpp ref :` line the script prints — or, when there
+is nothing to keep in the checkout, remove it and let the script re-clone:
+
+```bash
+git -C third_party/llama.cpp reset --hard <pinned-ref>
+bash scripts/gguf-quickstart.sh
+# ...or, with nothing to keep in the checkout:
+rm -rf third_party/llama.cpp && bash scripts/gguf-quickstart.sh
+```
+
+The refusal itself prints the same `git status --porcelain` excerpt (first 10
+lines) and these recovery commands, so you normally do not need this page.
+
+## missing-tool
+
+**Symptom:** `install-rocm-7.14.sh`, `00-check-env.sh`, or
+`gguf-quickstart.sh` stops with
+
+```
+ERROR: required command not found: <tool>      # installer, quickstart
+FAIL: required command not found: <tool>       # environment checker
+```
+
+for one of `git`, `cmake`, `curl`, or `python3`.
+
+**Cause:** the default GGUF path needs those four host tools on `PATH` before
+anything else: the installer guards `python3` and `curl` before it reads its
+manifest, the checker itemizes all four (so its OK verdict means the
+quickstart will not die on a missing command), and the quickstart checks all
+four after resolving the ROCm toolchain.
+
+**Fix:** install the missing tool for your distro — the installer and
+environment checker print the matching per-distro command for the tool they
+flagged (the quickstart stops with the bare error line above). To install all
+four up front:
+
+```bash
+sudo apt-get install git cmake curl python3   # Debian/Ubuntu
+sudo dnf install git cmake curl python3       # Fedora/RHEL
+sudo pacman -S git cmake curl python3         # Arch
+```
+
 ---
 
 ## DFlash / llama.cpp benchmark gotchas
@@ -193,20 +274,22 @@ draft acceptance is null/zero). The draft model loaded fine but did nothing.
 loop, so the server runs as a normal single-model server. This is a *silent*
 no-op — no warning is logged.
 
-**Fix:** always pass `--spec-type draft-dflash --spec-draft-n-max 16` alongside
+**Fix:** always pass `--spec-type draft-dflash --spec-draft-n-max 15` alongside
 `-md`. The full DFlash invocation is:
 
 ```
 -m models/<weight>.gguf -ngl 999 ... \
   -md models/dflash-kquant.gguf -ngld 99 \
-  --spec-type draft-dflash --spec-draft-n-max 16
+  --spec-type draft-dflash --spec-draft-n-max 15
 ```
 
-`--spec-draft-n-max 16` is the measured sweet spot (it equals the DFlash
-drafter's block_size). A pre-matrix sweep gave n_max `3 / 8 / 16 / 32` →
-**1.14× / 1.51× / 1.60× / 1.60×** — 16 is the elbow; 32 is flat, so 16 wins on
-memory. With this engaged, the 17gb weight delivers **2.20×** (23.03 vs 10.48
-tok/s) at greedy batch 1. Verification: the cell JSON's `acceptance` block is
+`--spec-draft-n-max 15` is the measured sweet spot. Upstream DFlash drafts at
+most `block_size - 1` = 15 tokens per round and silently clamps any higher
+request down to 15 with a warning line at every server start — so request 15
+directly. A pre-matrix sweep gave n_max `3 / 8 / 16 / 32` →
+**1.14× / 1.51× / 1.60× / 1.60×**; the curve is flat past the elbow (the 16
+and 32 cells effectively ran at 15 via the clamp). With this engaged, the
+17gb weight delivers **2.20×** (23.03 vs 10.48 tok/s) at greedy batch 1. Verification: the cell JSON's `acceptance` block is
 non-null and the rate is ~0.23. If you see 1.0× with null acceptance, you have
 fallen into this trap.
 

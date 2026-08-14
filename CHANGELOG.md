@@ -7,6 +7,55 @@ approval.
 
 ## Unreleased
 
+### Added
+
+- A README "Verify it works" quick-start block: the exact health and chat
+  completion requests to run against the served model, with the
+  reasoning-first `max_tokens` guidance that keeps a first answer non-empty.
+- Per-distro host-tool install one-liners in the README requirements section,
+  matching the per-distro hints the scripts print when a tool is missing.
+- Documentation for `MODEL_DEST`, the knob that stores the ~15.6 GiB model
+  outside the clone so one hash-verified download is reused across clones.
+
+### Changed
+
+- The ROCm 7.14 installer deletes the tarball after a successful install
+  instead of leaving ~1.6 GiB behind in `/tmp`; a user-pre-placed
+  `ROCM714_ARCHIVE` is verified, used, and left in place.
+- DFlash speculative decoding requests `--spec-draft-n-max 15` (previously
+  16): upstream drafts at most `block_size - 1` tokens and clamps higher
+  requests with a warning line at every server start.
+- The GGUF quickstart gates on the serving port before any setup work, so a
+  busy or unusable `PORT` refuses in well under a second instead of after the
+  fetch/build chain.
+
+### Fixed
+
+- Fresh-clone cold start no longer dead-ends: the quickstart now checks out
+  the pinned llama.cpp ref immediately after its own no-checkout clone, so
+  the dirty-tree guard can no longer misread that empty clone as every
+  tracked file staged-deleted and refuse on every cold start.
+- The ROCm 7.14 installer exits 0 after a successful install again; the
+  version tail's `hipcc --version | head -1` pipeline used to die with exit
+  141 (SIGPIPE) under `set -o pipefail`.
+- The installer and quickstart refuse up front when the target filesystems
+  cannot hold the download and the extracted tree, stating required vs
+  available GiB and the escape hatches, instead of dying mid-install with a
+  raw "No space left on device".
+- The quickstart's port probe no longer leaks a raw Python traceback before
+  its busy-port error, and reports a non-numeric `PORT` as unusable rather
+  than in use.
+- Dirty llama.cpp checkout refusals state what changed and give concrete
+  recovery steps instead of dead-ending.
+- `00-check-env.sh` failure exits state expected vs observed values and the
+  next action.
+- `00-check-env.sh` itemizes the quickstart's required host tools, failing
+  with per-distro install hints when one is missing, and guards for a missing
+  python3 before first use.
+- `00-check-env.sh` pool checks label their thresholds as GPU-visible memory,
+  so the README's ~20 GiB disk figure cannot be conflated with the
+  GPU-visible envelope.
+
 ## [0.1.0] - 2026-08-14
 
 ### Added

@@ -20,6 +20,45 @@ export PATH="$HOME/.local/bin:$PATH"
 source "$HERE/scripts/lib/rocm.sh"
 # shellcheck source=scripts/lib/llama_build.sh
 source "$HERE/scripts/lib/llama_build.sh"
+
+# F-16/F-11: gate on the serving port before anything expensive - the plan
+# header, ROCm resolution, tool checks, clone/checkout guards, build
+# fingerprinting and artifact re-verification all used to run before this
+# refusal, costing seconds on a warm tree and minutes on a rebuild-needed one.
+# The probe needs python3; without it, fall through to the required-tools
+# guard below instead of misreading a missing interpreter as a busy port.
+PORT="${PORT:-8080}"
+port_probe_rc=0
+if command -v python3 >/dev/null 2>&1; then
+    python3 - "$PORT" <<'PY_PORT' || port_probe_rc=$?
+import socket
+import sys
+
+try:
+    port = int(sys.argv[1])
+except ValueError:
+    # Review minor: a non-numeric PORT cannot be "in use"; exit with its own
+    # code so the shell side can report the value instead of a busy port.
+    sys.exit(2)
+sock = socket.socket()
+try:
+    sock.bind(("127.0.0.1", port))
+except OSError:
+    # F-11: exit cleanly so the shell gate prints the actionable ERROR
+    # line; an unhandled bind error used to leak a traceback right before it.
+    sys.exit(1)
+finally:
+    sock.close()
+PY_PORT
+fi
+if [ "$port_probe_rc" -eq 2 ]; then
+    echo "ERROR: PORT=$PORT is not a usable port number; choose PORT=<free-port>." >&2
+    exit 1
+elif [ "$port_probe_rc" -ne 0 ]; then
+    echo "ERROR: port $PORT is already in use; choose PORT=<free-port>." >&2
+    exit 1
+fi
+
 resolve_rocm_prefix || exit 1
 rocm_ver="$(detect_rocm_version "$ROCM_PREFIX")"
 print_selected_rocm "$rocm_ver"
@@ -58,9 +97,106 @@ GGUF_REVISION="${GGUF_REVISION:-$VALIDATED_GGUF_REVISION}"
 GGUF_FILE="${GGUF_FILE:-muse-glimmer-30B-kquant-17gb.gguf}"
 MMPROJ_FILE="mmproj-kquant.gguf"
 DFLASH_FILE="dflash-kquant.gguf"
+# F-18: upstream DFlash drafts at most block_size - 1 = 15 tokens per round
+# and clamps any higher --spec-draft-n-max request down to 15 with a warning
+# line at every server start, so request the effective maximum directly.
+SPEC_DRAFT_N_MAX=15
 DEST="${MODEL_DEST:-models}"
-PORT="${PORT:-8080}"
 export HF_ENDPOINT="${HF_ENDPOINT:-https://huggingface.co}"
+
+# F-03: refuse up front instead of dying mid-download (or mid-build) with a
+# raw "No space left on device". Floors come from the artifact manifest the
+# fetch step already verifies against:
+#   - every selected artifact that is not yet present locally contributes its
+#     manifest size_bytes (WITH_DFLASH/WITH_MMPROJ add the drafter/projector).
+#     Artifacts already on disk are skipped: they occupy their space already,
+#     and re-requiring it would lock warm reruns out of serving on any disk
+#     that filled up after the download. If hash verification quarantines one,
+#     the rerun sees it absent and this preflight re-engages, so a refetch can
+#     never start without this check having passed.
+#   - the llama.cpp checkout/build allowance covers the ~206 MiB validated
+#     worktree plus the ~1022 MiB build-714 tree measured on the validated
+#     stack, rounded up to 1.5 GiB for ref/build churn. It always applies:
+#     a fingerprint change can force a rebuild on any run.
+# models/ and the build dir can live on different filesystems, so each is
+# checked against its own floor; when they share a mount the floors are
+# combined and checked once (two separate checks against the same mount
+# would undercount the shared space).
+DISK_BUILD_ALLOWANCE_BYTES=$((512 * 1024 * 1024 * 3))
+
+artifact_size_bytes() {  # artifact_size_bytes <filename> -> manifest size_bytes
+    python3 - "$HERE/configs/artifact-manifest.json" "$1" <<'PY'
+import json, sys
+files = json.load(open(sys.argv[1]))["sets"]["gguf"]["files"]
+sizes = {item["path"]: item["size_bytes"] for item in files}
+default = "muse-glimmer-30B-kquant-17gb.gguf"
+print(sizes.get(sys.argv[2], sizes.get(default, 0)))
+PY
+}
+
+artifact_gib() {  # artifact_gib <filename> -> manifest size rendered as "<N.NN> GiB"
+    awk -v b="$(artifact_size_bytes "$1")" 'BEGIN {printf "%.2f GiB", b / 1073741824}'
+}
+
+artifact_plan_note() {  # artifact_plan_note <filename> -> "(<size> to fetch)" | "(already present; will be verified)"
+    local filename="$1"
+    if [ -f "$DEST/$filename" ]; then
+        printf '(already present; will be verified)'
+    else
+        printf '(%s to fetch)' "$(artifact_gib "$filename")"
+    fi
+}
+
+fs_of_dir() {  # fs_of_dir <dir> -> "<mount> <avail_bytes>" of the filesystem holding <dir>
+    local dir="$1"
+    # Walk up to the nearest existing ancestor: models/ and the build dir do
+    # not exist yet this early in the run.
+    while [ ! -d "$dir" ]; do
+        dir="$(dirname "$dir")"
+    done
+    df -Pk "$dir" | awk 'NR==2 {print $NF, $4 * 1024}'
+}
+
+require_disk_bytes() {  # require_disk_bytes <what> <dir> <floor_bytes> <remedy>
+    local what="$1" dir="$2" floor_bytes="$3" remedy="$4" mount avail
+    read -r mount avail <<<"$(fs_of_dir "$dir")"
+    if [ "$avail" -lt "$floor_bytes" ]; then
+        printf 'ERROR: not enough disk space for %s: filesystem %s (holding %s) has %s GiB available, need at least %s GiB.\n' \
+            "$what" "$mount" "$dir" \
+            "$(awk -v b="$avail" 'BEGIN {printf "%.1f", b / 1073741824}')" \
+            "$(awk -v b="$floor_bytes" 'BEGIN {printf "%.1f", b / 1073741824}')" >&2
+        printf '       %s\n' "$remedy" >&2
+        exit 1
+    fi
+}
+
+DISK_MODEL_REMEDY="Free space on that filesystem, or set MODEL_DEST to a path on a larger filesystem, then rerun (MODEL_DEST also reuses the model across clones; see README)."
+selected_artifacts=("$GGUF_FILE")
+if [ "${WITH_MMPROJ:-0}" = "1" ]; then
+    selected_artifacts+=("$MMPROJ_FILE")
+fi
+if [ "${WITH_DFLASH:-0}" = "1" ]; then
+    selected_artifacts+=("$DFLASH_FILE")
+fi
+disk_model_floor_bytes=0
+for artifact in "${selected_artifacts[@]}"; do
+    if [ ! -f "$DEST/$artifact" ]; then
+        artifact_bytes="$(artifact_size_bytes "$artifact")"
+        disk_model_floor_bytes=$((disk_model_floor_bytes + artifact_bytes))
+    fi
+done
+
+if [ "$(fs_of_dir "$DEST" | awk '{print $1}')" = "$(fs_of_dir "$BUILD_DIR" | awk '{print $1}')" ]; then
+    require_disk_bytes "the model download and the llama.cpp checkout/build" \
+        "$DEST" "$((disk_model_floor_bytes + DISK_BUILD_ALLOWANCE_BYTES))" \
+        "$DISK_MODEL_REMEDY"
+else
+    require_disk_bytes "the model download" "$DEST" "$disk_model_floor_bytes" \
+        "$DISK_MODEL_REMEDY"
+    require_disk_bytes "the llama.cpp checkout/build" "$BUILD_DIR" \
+        "$DISK_BUILD_ALLOWANCE_BYTES" \
+        "Free space on that filesystem, then rerun."
+fi
 
 echo "llama.cpp source: $LLAMA_CPP_REPO"
 echo "llama.cpp ref   : $LLAMA_CPP_REF"
@@ -77,9 +213,19 @@ else
     echo "GGUF track      : latest/experimental override"
 fi
 echo "llama.cpp build : $BUILD_DIR"
+# F-10: WITH_MMPROJ / WITH_DFLASH used to be invisible until their fetch
+# lines appeared mid-run; acknowledge each optional feature - and its disk
+# cost - in the plan header.
+if [ "${WITH_MMPROJ:-0}" = "1" ]; then
+    echo "mmproj          : $MMPROJ_FILE $(artifact_plan_note "$MMPROJ_FILE")"
+fi
+if [ "${WITH_DFLASH:-0}" = "1" ]; then
+    echo "dflash drafter  : $DFLASH_FILE $(artifact_plan_note "$DFLASH_FILE")"
+    echo "spec decoding   : draft-dflash (n-max $SPEC_DRAFT_N_MAX)"
+fi
 
 # Clone once, then fetch and detach at the selected ref on every run. Existing
-# uncommitted llama.cpp changes are never deleted; checkout fails instead.
+# uncommitted llama.cpp changes are never deleted; the guard refuses instead.
 if [ ! -d "$LLAMA/.git" ]; then
     if [ -e "$LLAMA" ] && [ -n "$(find "$LLAMA" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
         echo "ERROR: $LLAMA exists but is not a git checkout; move it aside first." >&2
@@ -87,22 +233,31 @@ if [ ! -d "$LLAMA/.git" ]; then
     fi
     mkdir -p "$HERE/third_party"
     git clone --filter=blob:none --no-checkout "$LLAMA_CPP_REPO" "$LLAMA"
+    # F-04: this clone is seconds old and empty by construction (no index, no
+    # worktree), so it cannot hold user changes. Reach the selected ref now,
+    # before any dirty-tree guard can misread that state as every tracked
+    # path staged-deleted and dead-end each cold start.
+    git -C "$LLAMA" fetch --depth 1 "$LLAMA_CPP_REPO" "$LLAMA_CPP_REF"
+    git -C "$LLAMA" checkout --detach FETCH_HEAD
 fi
 CURRENT_LLAMA_CPP_COMMIT="$(git -C "$LLAMA" rev-parse HEAD 2>/dev/null || true)"
 if [ "$CURRENT_LLAMA_CPP_COMMIT" != "$LLAMA_CPP_REF" ]; then
-    if ! git -C "$LLAMA" diff --quiet --ignore-submodules HEAD -- ||
-       ! git -C "$LLAMA" diff --cached --quiet; then
-        echo "ERROR: $LLAMA has tracked changes; refusing to change commits." >&2
+    if llama_has_tracked_changes "$LLAMA"; then
+        llama_refuse_dirty_checkout "$LLAMA" \
+            "switch llama.cpp from $CURRENT_LLAMA_CPP_COMMIT to $LLAMA_CPP_REF"
         exit 1
     fi
     git -C "$LLAMA" fetch --depth 1 "$LLAMA_CPP_REPO" "$LLAMA_CPP_REF"
     git -C "$LLAMA" checkout --detach FETCH_HEAD
-elif ! git -C "$LLAMA" diff --quiet --ignore-submodules HEAD -- ||
-     ! git -C "$LLAMA" diff --cached --quiet; then
-    echo "ERROR: validated llama.cpp checkout has tracked modifications." >&2
+elif llama_has_tracked_changes "$LLAMA"; then
+    llama_refuse_dirty_checkout "$LLAMA" \
+        "reuse the llama.cpp checkout at $CURRENT_LLAMA_CPP_COMMIT"
     exit 1
 else
-    echo "llama.cpp checkout already at validated commit; no fetch needed"
+    # Ref: Fix-A review cosmetic - this also prints right after the fresh-clone
+    # branch above did its own fetch+checkout, so it must not claim no fetch
+    # happened; state the checkout's actual condition instead.
+    echo "llama.cpp checkout at $LLAMA_CPP_REF; working tree clean"
 fi
 ACTUAL_LLAMA_CPP_COMMIT="$(git -C "$LLAMA" rev-parse HEAD)"
 if [[ "$LLAMA_CPP_REF" =~ ^[0-9a-fA-F]{40}$ ]] &&
@@ -197,23 +352,20 @@ if [ "${WITH_DFLASH:-0}" = "1" ]; then
     fetch_file "$DFLASH_FILE"
     SERVER_ARGS+=(
         -md "$DEST/$DFLASH_FILE" -ngld 99
-        --spec-type draft-dflash --spec-draft-n-max 16
+        --spec-type draft-dflash --spec-draft-n-max "$SPEC_DRAFT_N_MAX"
     )
 fi
 
-if ! python3 - "$PORT" <<'PY_PORT'
-import socket
-import sys
-sock = socket.socket()
-try:
-    sock.bind(("127.0.0.1", int(sys.argv[1])))
-finally:
-    sock.close()
-PY_PORT
-then
-    echo "ERROR: port $PORT is already in use; choose PORT=<free-port>." >&2
-    exit 1
-fi
-
 echo "Serving on http://127.0.0.1:$PORT ..."
+if [ "${WITH_DFLASH:-0}" = "1" ]; then
+    # F-10: --spec-type draft-dflash otherwise appears nowhere the user can
+    # see (the server never echoes its argv); state the effective
+    # speculative arguments on one line.
+    echo "speculative decoding: draft-dflash (draft: $DEST/$DFLASH_FILE, n-max $SPEC_DRAFT_N_MAX)"
+    # F-09: upstream prints E/W "failed ..." lines while fitting DFlash
+    # memory even on a fully successful load, exactly where the user is
+    # checking whether DFlash engaged; they cannot be silenced without
+    # touching llama.cpp, so frame them just before they appear.
+    echo "note: upstream \"failed to initialize\"/\"failed to measure\" lines during DFlash memory fitting are expected; the definitive confirmation is 'adding speculative implementation' below"
+fi
 exec "$BUILD_DIR/bin/llama-server" "${SERVER_ARGS[@]}"     -ngl 999 -c 32768 --port "$PORT" --jinja

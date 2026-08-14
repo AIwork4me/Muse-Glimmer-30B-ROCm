@@ -39,7 +39,9 @@ def test_dflash_adds_draft_model():
     # draft model but `--spec-type` defaults to `none`, so 0 drafts are proposed
     # (regression observed on gfx1151: 10.5 tok/s, 1.00x speedup).
     assert "--spec-type draft-dflash" in s
-    assert "--spec-draft-n-max 16" in s   # measured sweet spot (= block_size)
+    # Upstream clamps any request above block_size-1=15 (with a warning
+    # line at every start), so request the effective maximum directly.
+    assert "--spec-draft-n-max 15" in s
 
 
 def test_dflash_spec_flags_absent_on_baseline():

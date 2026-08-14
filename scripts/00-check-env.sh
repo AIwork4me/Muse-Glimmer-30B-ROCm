@@ -7,6 +7,15 @@ fail() {
     exit 1
 }
 warn() { echo "WARNING: $1" >&2; }
+# F-12: wording kept in lockstep with the tool guard in install-rocm-7.14.sh.
+missing_tool_fail() {
+    echo "FAIL: required command not found: $1" >&2
+    echo "  Debian/Ubuntu:  sudo apt-get install $1" >&2
+    echo "  Fedora/RHEL:    sudo dnf install $1" >&2
+    echo "  Arch:           sudo pacman -S $1" >&2
+    echo "    see docs/troubleshooting.md" >&2
+    exit 1
+}
 usage() {
     cat <<'EOF'
 Usage: bash scripts/00-check-env.sh [--profile gguf|vllm|reference]
@@ -47,6 +56,10 @@ case "$PROFILE" in
 esac
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# F-12: the manifest reads below shell out to python3 before any diagnostic
+# has printed; guard the interpreter first so a host without it gets an
+# actionable FAIL instead of a raw bash "command not found".
+command -v python3 >/dev/null 2>&1 || missing_tool_fail python3
 # shellcheck source=scripts/lib/version.sh
 source "$ROOT/scripts/lib/version.sh"
 # shellcheck source=scripts/lib/rocm.sh
@@ -86,6 +99,9 @@ GGUF_MODEL_BYTES="$(read_default_gguf_bytes)"
 # The published GGUF runs used the real 94 GiB Strix Halo host, whose gfx1151
 # coarse-grained pool is 80 GiB. This is a warning boundary, not a minimum.
 GGUF_REFERENCE_VISIBLE_GIB=80
+# F-14: the same manifest-derived size, rendered as the GPU-visible floor the
+# user sees next to the measured pool (GPU memory, explicitly not disk).
+GGUF_FLOOR_GIB="$(awk -v b="$GGUF_MODEL_BYTES" 'BEGIN {printf "%.1f", b / 1073741824}')"
 
 echo "Environment profile: $PROFILE"
 case "$PROFILE" in
@@ -93,6 +109,20 @@ case "$PROFILE" in
     vllm) echo "  path: optional advanced vLLM + BF16" ;;
     reference) echo "  path: exact historical vLLM/BF16 reference" ;;
 esac
+
+if [ "$PROFILE" = "gguf" ]; then
+    # F-12: verify the README-declared host tools so an OK verdict means the
+    # next step (scripts/gguf-quickstart.sh) will not die on a missing
+    # command. Same list as its required-commands loop.
+    echo "host tools:"
+    for tool in git cmake curl python3; do
+        if command -v "$tool" >/dev/null 2>&1; then
+            echo "  tool $tool: $(command -v "$tool")"
+        else
+            missing_tool_fail "$tool"
+        fi
+    done
+fi
 
 resolve_rocm_prefix || exit 1
 export PATH="$ROCM_PREFIX/bin:$PATH"
@@ -106,7 +136,7 @@ case "$PROFILE" in
             7.2.*)
                 warn "using the historical ROCm $rocm_ver fallback; ROCm 7.14 is recommended."
                 ;;
-            *) fail "GGUF profile expects ROCm 7.14.x or historical 7.2.x; got '$rocm_ver'" ;;
+            *) fail "GGUF profile expects ROCm 7.14.x (recommended) or historical 7.2.x; got '$rocm_ver'. Run scripts/install-rocm-7.14.sh to install 7.14, or set ROCM_PREFIX to an existing 7.14.x/7.2.x prefix." ;;
         esac
         ;;
     vllm|reference)
@@ -131,7 +161,12 @@ fi
 # Buffer rocminfo output. A live rocminfo piped to grep -q can receive SIGPIPE
 # under pipefail, so parsing always uses the complete captured output.
 rocminfo_out="$("$ROCM_PREFIX/bin/rocminfo" 2>/dev/null || true)"
-grep -q "gfx1151" <<<"$rocminfo_out" || fail "gfx1151 not found in $ROCM_PREFIX/bin/rocminfo"
+if ! grep -q "gfx1151" <<<"$rocminfo_out"; then
+    # F-15: name what the host actually reported, and where non-gfx1151
+    # users should look, instead of a bare "not found".
+    observed_gpus="$( { grep -oE 'gfx[0-9]+' <<<"$rocminfo_out" || true; } | sort -u | paste -sd' ' -)"
+    fail "gfx1151 not found in $ROCM_PREFIX/bin/rocminfo output; observed GPU id(s): ${observed_gpus:-none}. This project is validated on gfx1151 (AMD Strix Halo) only — see docs/hardware-validation.md for non-gfx1151 platforms."
+fi
 
 # First coarse-grained global pool belonging to the gfx1151 agent.
 vram_kb="$(awk '
@@ -141,12 +176,20 @@ vram_kb="$(awk '
 ' <<<"$rocminfo_out")"
 [[ "$vram_kb" =~ ^[0-9]+$ ]] ||
     fail "could not read gfx1151 global memory pool from rocminfo"
-echo "GPU-visible pool: $(( vram_kb / 1024 / 1024 )) GiB"
+pool_gib=$(( vram_kb / 1024 / 1024 ))
+
+if [ "$PROFILE" = "gguf" ]; then
+    # F-14: state the thresholds with the number on the passing path so a
+    # user can self-assess; both floors are GPU-visible memory, not disk.
+    echo "GPU-visible pool: ${pool_gib} GiB (default GGUF needs >= ${GGUF_FLOOR_GIB} GiB GPU-visible; validated envelope ${GGUF_REFERENCE_VISIBLE_GIB} GiB GPU-visible — warning boundary, not a minimum)"
+else
+    echo "GPU-visible pool: ${pool_gib} GiB (this profile requires >= ${MIN_VISIBLE_GIB} GiB GPU-visible)"
+fi
 
 if [ "$PROFILE" = "gguf" ]; then
     min_gguf_kib=$(( (GGUF_MODEL_BYTES + 1023) / 1024 ))
     if [ "$vram_kb" -lt "$min_gguf_kib" ]; then
-        fail "GPU-visible pool is smaller than the $GGUF_MODEL_BYTES-byte default GGUF; full GPU offload cannot fit the weights."
+        fail "GPU-visible pool is ${pool_gib} GiB, but the default GGUF needs >= ${GGUF_FLOOR_GIB} GiB GPU-visible to fit; select a smaller quant with GGUF_FILE=<path> (see scripts/gguf-quickstart.sh) or increase GPU-visible memory in the BIOS."
     fi
     reference_visible_kib=$(( GGUF_REFERENCE_VISIBLE_GIB * 1024 * 1024 ))
     if [ "$vram_kb" -lt "$reference_visible_kib" ]; then

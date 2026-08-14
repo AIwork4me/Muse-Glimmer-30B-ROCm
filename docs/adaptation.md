@@ -115,7 +115,7 @@ hit a registry limitation. The llama.cpp path did:
 Two negative findings are part of the reference:
 
 1. `-md dflash-kquant.gguf` alone loads the draft model but does not draft.
-   `--spec-type draft-dflash --spec-draft-n-max 16` is required.
+   `--spec-type draft-dflash --spec-draft-n-max 15` is required.
 2. At `-np 16`, DFlash became pathological. The 17GB probe completed no
    requested tokens in 27.7 seconds; the dynamic full cell was stopped after
    5 h 16 m with 0.18% acceptance. Baseline c=16 remained healthy.
