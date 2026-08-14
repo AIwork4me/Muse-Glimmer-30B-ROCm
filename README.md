@@ -38,7 +38,36 @@ bash scripts/install-rocm-7.14.sh
 bash scripts/00-check-env.sh
 bash scripts/gguf-quickstart.sh
 # OpenAI-compatible server: http://127.0.0.1:8080
+# Leave this terminal running (Ctrl-C stops the server); open a second
+# terminal for the verification requests below.
 ```
+
+### Verify it works
+
+From that second terminal:
+
+```bash
+curl http://127.0.0.1:8080/health
+# {"status":"ok"}
+
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":512}'
+```
+
+The completion returns `"content":"OK"` once generation finishes (abridged;
+the visible answer arrives after ~50–70 hidden reasoning tokens):
+
+```json
+{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"OK","reasoning_content":"..."}}],"usage":{"completion_tokens":62,"prompt_tokens":61}}
+```
+
+> **Muse-Glimmer is reasoning-first:** it writes ~50–70 tokens of hidden
+> chain-of-thought (`reasoning_content`) before any visible `content`, so a
+> small `max_tokens` (e.g. 16) spends the whole budget on reasoning and returns
+> empty `content` with `finish_reason:"length"` — HTTP 200, no error. Use
+> `max_tokens` ≥ 512 or omit it
+> ([details](docs/troubleshooting.md#reasoning-length)).
 
 Prefer a confirmed one-command entry point? The optional wrapper prints the
 manifest-derived ROCm/model download sizes and waits for approval before it
