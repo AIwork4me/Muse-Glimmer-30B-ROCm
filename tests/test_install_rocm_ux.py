@@ -17,6 +17,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import time
 
 import pytest
 
@@ -269,6 +270,48 @@ def test_script_version_tail_is_not_a_pipe() -> None:
         "the cosmetic version tail must not pipe hipcc into head (F-01 SIGPIPE)"
     )
     assert '<<<"$("$PREFIX/bin/hipcc" --version)"' in src
+
+
+# ---------------------------------------------------------------------------
+# Idempotent rerun: an installed prefix is a fast no-op (documented contract)
+# ---------------------------------------------------------------------------
+
+
+def test_rerun_with_installed_prefix_is_a_fast_no_op_download(tmp_path: Path) -> None:
+    """Regression pin on the script's own header promise ("if bin/hipcc
+    already exists, this is a no-op"): a rerun over a valid prefix must exit
+    0 without downloading (the review found this path untested). The poison
+    curl still satisfies the top tool guard - only its invocation would
+    fail."""
+    prefix = tmp_path / "rocm"
+    (prefix / "bin").mkdir(parents=True)
+    body = "\n".join([HIPCC_FIRST_LINE, *HIPCC_EXTRA_LINES]) + "\n"
+    (prefix / "bin/hipcc").write_text(
+        "#!/bin/sh\ncat <<'EOF'\n" + body + "EOF\n", encoding="utf-8"
+    )
+    (prefix / "bin/hipcc").chmod(0o755)
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    poison = bindir / "curl"
+    poison.write_text(
+        "#!/bin/sh\necho 'POISON-CURL-INVOKED: rerun must not download' >&2\nexit 23\n",
+        encoding="utf-8",
+    )
+    poison.chmod(0o755)
+
+    tarball = make_tarball(tmp_path)
+    manifest = write_manifest(tmp_path, tarball)
+
+    started = time.monotonic()
+    result = run_installer(tmp_path, manifest=manifest, prefix=prefix)
+    elapsed = time.monotonic() - started
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "nothing to do" in result.stdout
+    assert "Downloading" not in result.stdout
+    assert "POISON-CURL-INVOKED" not in result.stderr, "no download may start"
+    assert elapsed < 5, f"no-op rerun must be fast, took {elapsed:.1f}s"
 
 
 # ---------------------------------------------------------------------------
