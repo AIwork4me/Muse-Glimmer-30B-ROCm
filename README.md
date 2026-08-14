@@ -69,6 +69,8 @@ Batch 1, greedy decoding, llama.cpp, Meta K-Quant weights and quantized drafter:
 |---|---:|---:|---:|
 | gfx1151, K-Quant-17GB | 10.48 tok/s | 23.03 tok/s | **2.20×** |
 | gfx1151, dynamic K-Quant | 9.14 tok/s | 21.82 tok/s | **2.39×** |
+| W7900 (`gfx1100`), K-Quant-17GB | 33.19 tok/s | 63.98 tok/s | **1.93×** |
+| W7900 (`gfx1100`), dynamic K-Quant | 30.23 tok/s | 58.26 tok/s | **1.93×** |
 
 This is a **methodology-aligned comparison**, not an identical reproduction of
 Meta's prompt corpus: Meta did not publish that corpus. The recorded arithmetic
@@ -76,22 +78,22 @@ smoke check is byte-identical under greedy decoding. The repository also
 provides a six-prompt corpus-wide checker; no expanded pass claim is made until
 that GPU test is run and recorded.
 
+The W7900 (`gfx1100`) rows are new greedy measurements on the same corpus
+(draft acceptance ~0.24); DFlash is ~1.93×, a touch below gfx1151 because the
+desktop card's much faster baseline is less memory-bound.
+
 ### Study 2 — original throughput-under-load study
 
-| Weight | c=1 baseline / DFlash | c=4 baseline / DFlash | c=16 baseline |
-|---|---:|---:|---:|
-| 17GB | 10.52 / 22.26 tok/s | 15.60 / 27.30 tok/s | 34.47 tok/s |
-| dynamic | 9.09 / 19.89 tok/s | 20.90 / 28.22 tok/s | 31.05 tok/s |
+`c` is llama.cpp concurrency (`-np`); an original concurrency study, not a
+Meta-aligned anchor. gfx1151 was measured to `c=16`; the W7900 desktop GPU
+extends to `c=32`. DFlash is shown at `c≤4`, where it helps.
 
-This is an original concurrency study, not a Meta-aligned comparison anchor.
-
-**Radeon PRO W7900 (`gfx1100`, RDNA 3, 48 GiB)** — the same study on a desktop
-GPU, extended to `c=32` (DFlash reported at `c≤4`, where it helps):
-
-| Weight | c=1 baseline / DFlash | c=4 baseline / DFlash | c=16 baseline | c=32 baseline |
-|---|---:|---:|---:|---:|
-| 17GB | 33.72 / 56.35 tok/s | 66.46 / 77.44 tok/s | 218.56 tok/s | 293.29 tok/s |
-| dynamic | 30.61 / 51.92 tok/s | 65.63 / 71.51 tok/s | 209.65 tok/s | 265.71 tok/s |
+| GPU | Weight | c=1 baseline / DFlash | c=4 baseline / DFlash | c=16 baseline | c=32 baseline |
+|---|---|---:|---:|---:|---:|
+| gfx1151 | 17GB | 10.52 / 22.26 tok/s | 15.60 / 27.30 tok/s | 34.47 tok/s | — |
+| gfx1151 | dynamic | 9.09 / 19.89 tok/s | 20.90 / 28.22 tok/s | 31.05 tok/s | — |
+| W7900 (`gfx1100`) | 17GB | 33.72 / 56.35 tok/s | 66.46 / 77.44 tok/s | 218.56 tok/s | 293.29 tok/s |
+| W7900 (`gfx1100`) | dynamic | 30.61 / 51.92 tok/s | 65.63 / 71.51 tok/s | 209.65 tok/s | 265.71 tok/s |
 
 W7900 runs ~3.2–3.4× the gfx1151 APU at `c=1` and up to ~6.8× at `c=16`
 (dedicated GDDR6 vs unified LPDDR5X); peak VRAM ≤ 24.9 GiB of 48. Full detail +
