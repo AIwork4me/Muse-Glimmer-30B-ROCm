@@ -20,6 +20,32 @@ export PATH="$HOME/.local/bin:$PATH"
 source "$HERE/scripts/lib/rocm.sh"
 # shellcheck source=scripts/lib/llama_build.sh
 source "$HERE/scripts/lib/llama_build.sh"
+
+# F-16/F-11: gate on the serving port before anything expensive - the plan
+# header, ROCm resolution, tool checks, clone/checkout guards, build
+# fingerprinting and artifact re-verification all used to run before this
+# refusal, costing seconds on a warm tree and minutes on a rebuild-needed one.
+# The probe needs python3; without it, fall through to the required-tools
+# guard below instead of misreading a missing interpreter as a busy port.
+PORT="${PORT:-8080}"
+if command -v python3 >/dev/null 2>&1 && ! python3 - "$PORT" <<'PY_PORT'
+import socket
+import sys
+sock = socket.socket()
+try:
+    sock.bind(("127.0.0.1", int(sys.argv[1])))
+except OSError:
+    # F-11: exit cleanly so the outer `if !` prints the actionable ERROR
+    # line; an unhandled bind error used to leak a traceback right before it.
+    sys.exit(1)
+finally:
+    sock.close()
+PY_PORT
+then
+    echo "ERROR: port $PORT is already in use; choose PORT=<free-port>." >&2
+    exit 1
+fi
+
 resolve_rocm_prefix || exit 1
 rocm_ver="$(detect_rocm_version "$ROCM_PREFIX")"
 print_selected_rocm "$rocm_ver"
@@ -59,7 +85,6 @@ GGUF_FILE="${GGUF_FILE:-muse-glimmer-30B-kquant-17gb.gguf}"
 MMPROJ_FILE="mmproj-kquant.gguf"
 DFLASH_FILE="dflash-kquant.gguf"
 DEST="${MODEL_DEST:-models}"
-PORT="${PORT:-8080}"
 export HF_ENDPOINT="${HF_ENDPOINT:-https://huggingface.co}"
 
 echo "llama.cpp source: $LLAMA_CPP_REPO"
@@ -108,7 +133,10 @@ elif llama_has_tracked_changes "$LLAMA"; then
         "reuse the llama.cpp checkout at $CURRENT_LLAMA_CPP_COMMIT"
     exit 1
 else
-    echo "llama.cpp checkout already at validated commit; no fetch needed"
+    # Ref: Fix-A review cosmetic - this also prints right after the fresh-clone
+    # branch above did its own fetch+checkout, so it must not claim no fetch
+    # happened; state the checkout's actual condition instead.
+    echo "llama.cpp checkout at $LLAMA_CPP_REF; working tree clean"
 fi
 ACTUAL_LLAMA_CPP_COMMIT="$(git -C "$LLAMA" rev-parse HEAD)"
 if [[ "$LLAMA_CPP_REF" =~ ^[0-9a-fA-F]{40}$ ]] &&
@@ -205,20 +233,6 @@ if [ "${WITH_DFLASH:-0}" = "1" ]; then
         -md "$DEST/$DFLASH_FILE" -ngld 99
         --spec-type draft-dflash --spec-draft-n-max 16
     )
-fi
-
-if ! python3 - "$PORT" <<'PY_PORT'
-import socket
-import sys
-sock = socket.socket()
-try:
-    sock.bind(("127.0.0.1", int(sys.argv[1])))
-finally:
-    sock.close()
-PY_PORT
-then
-    echo "ERROR: port $PORT is already in use; choose PORT=<free-port>." >&2
-    exit 1
 fi
 
 echo "Serving on http://127.0.0.1:$PORT ..."
