@@ -212,8 +212,12 @@ Three machine-readable files define the reference and public claim boundary:
 Versioned [JSON Schemas](schemas/) and
 `scripts/check_claim_consistency.py` make these boundaries auditable in CI.
 
-The defaults are the **validated reference**. Overrides are explicit and
-reported as **latest/experimental**:
+The defaults are the **validated reference**. Overrides are explicit. Only
+revision overrides (`MODEL_REVISION`, `LLAMA_CPP_REF`, `GGUF_REVISION`) move
+a run to the reported-as-**latest/experimental** track, where benchmark
+claims no longer apply; the transport and location knobs (`HF_ENDPOINT`,
+`MODEL_DEST`) change where artifacts come from or land and keep the
+validated manifest checks:
 
 ```bash
 # Optional regional mirror; the official endpoint remains the default.

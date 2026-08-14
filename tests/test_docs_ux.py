@@ -97,6 +97,28 @@ def test_model_dest_is_documented_with_the_other_env_knobs() -> None:
     assert "across clones" in contract
 
 
+def test_overrides_banner_scopes_the_experimental_track_to_revision_overrides() -> None:
+    readme = _src("README.md")
+    contract = readme.split("## Reproducibility contract", 1)[1].split(
+        "## Hardware validation matrix", 1
+    )[0]
+    banner = contract.split("```bash", 1)[0]
+    # Final-review Minor-2: only revision overrides move a run to the
+    # reported-as-latest/experimental track (what the scripts actually print);
+    # HF_ENDPOINT/MODEL_DEST are transport/location knobs that keep the
+    # validated manifest checks and must not sit under that sentence.
+    assert "latest/experimental" in banner
+    for knob in ("MODEL_REVISION", "LLAMA_CPP_REF", "GGUF_REVISION"):
+        assert knob in banner, f"{knob} must be named as the experimental track"
+    for knob in ("HF_ENDPOINT", "MODEL_DEST"):
+        assert knob in banner, f"{knob} must be named as a transport/location knob"
+    assert "Overrides are explicit and reported" not in banner, (
+        "the blanket 'overrides ... reported as latest/experimental' wording"
+        " mislabels MODEL_DEST/HF_ENDPOINT, which never leave the validated"
+        " hash-checked track"
+    )
+
+
 def test_optional_features_size_their_extra_downloads() -> None:
     readme = _src("README.md")
     # Manifest-exact sizes (1.52 GiB drafter / 1.30 GiB mmproj).
