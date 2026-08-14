@@ -168,3 +168,56 @@ def test_quickstart_checks_out_pinned_ref_before_any_guard_runs() -> None:
     assert clone_at < checkout_at < guard_at, (
         "fresh clone must reach the pinned ref before any dirty-tree guard"
     )
+
+
+def test_quickstart_routes_both_refusals_through_actionable_error() -> None:
+    src = SCRIPT.read_text(encoding="utf-8")
+    assert src.count('llama_refuse_dirty_checkout "$LLAMA"') == 2
+    assert "has tracked changes; refusing to change commits" not in src
+    assert "validated llama.cpp checkout has tracked modifications" not in src
+
+
+def test_dirty_refusal_names_state_shows_excerpt_and_recovery(
+    tmp_path: Path,
+) -> None:
+    origin, pin = make_origin(tmp_path)
+    clone = populated_checkout(origin, tmp_path, pin)
+    (clone / "README.md").write_text("local edit\n", encoding="utf-8")
+    result = bash(
+        f'source {LIB}; llama_refuse_dirty_checkout {clone} '
+        '"switch llama.cpp from HEAD to the pinned commit"'
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    err = result.stderr
+    assert str(clone) in err, "must name the checkout"
+    assert "switch llama.cpp from HEAD to the pinned commit" in err
+    assert "M README.md" in err, "must excerpt git status --porcelain"
+    assert "git status --porcelain" in err
+    assert "checkout -- ." in err, "must offer the discard recovery verb"
+    assert "stash" in err, "must offer the stash alternative"
+    assert "docs/troubleshooting.md#dirty-llama-cpp-checkout" in err
+
+
+def test_dirty_refusal_excerpt_is_capped_at_ten_lines(tmp_path: Path) -> None:
+    origin, pin = make_origin(tmp_path)
+    clone = populated_checkout(origin, tmp_path, pin)
+    for index in range(1, 16):
+        (clone / f"mod-{index:02d}.txt").write_text("edit\n", encoding="utf-8")
+        git(clone, "add", f"mod-{index:02d}.txt")
+    result = bash(
+        f'source {LIB}; llama_refuse_dirty_checkout {clone} "reuse it"'
+    )
+    assert result.returncode == 0, result.stderr
+    excerpt = [
+        line for line in result.stderr.splitlines()
+        if "mod-" in line
+    ]
+    assert len(excerpt) == 10
+    assert "mod-11.txt" not in result.stderr
+
+
+def test_troubleshooting_has_dirty_llama_checkout_entry() -> None:
+    text = TROUBLESHOOTING.read_text(encoding="utf-8")
+    assert "## dirty-llama-cpp-checkout" in text
+    assert "[#dirty-llama-cpp-checkout](#dirty-llama-cpp-checkout)" in text

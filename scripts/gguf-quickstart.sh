@@ -97,13 +97,15 @@ fi
 CURRENT_LLAMA_CPP_COMMIT="$(git -C "$LLAMA" rev-parse HEAD 2>/dev/null || true)"
 if [ "$CURRENT_LLAMA_CPP_COMMIT" != "$LLAMA_CPP_REF" ]; then
     if llama_has_tracked_changes "$LLAMA"; then
-        echo "ERROR: $LLAMA has tracked changes; refusing to change commits." >&2
+        llama_refuse_dirty_checkout "$LLAMA" \
+            "switch llama.cpp from $CURRENT_LLAMA_CPP_COMMIT to $LLAMA_CPP_REF"
         exit 1
     fi
     git -C "$LLAMA" fetch --depth 1 "$LLAMA_CPP_REPO" "$LLAMA_CPP_REF"
     git -C "$LLAMA" checkout --detach FETCH_HEAD
 elif llama_has_tracked_changes "$LLAMA"; then
-    echo "ERROR: validated llama.cpp checkout has tracked modifications." >&2
+    llama_refuse_dirty_checkout "$LLAMA" \
+        "reuse the llama.cpp checkout at $CURRENT_LLAMA_CPP_COMMIT"
     exit 1
 else
     echo "llama.cpp checkout already at validated commit; no fetch needed"

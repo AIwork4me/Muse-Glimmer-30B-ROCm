@@ -17,6 +17,7 @@ Every gotcha we hit, as **symptom → cause → fix**. Skim the left column.
 | `dflash-kquant.gguf` / `mmproj-kquant.gguf` download fails | [#dflash-mmproj-xet](#dflash-mmproj-xet) |
 | rocm-smi shows ~1 GiB but model is 16+ GiB | [#memory-footprint-apu](#memory-footprint-apu) |
 | `finish_reason: length` / empty `content` | [#reasoning-length](#reasoning-length) |
+| gguf-quickstart refuses: llama.cpp has tracked changes | [#dirty-llama-cpp-checkout](#dirty-llama-cpp-checkout) |
 
 ---
 
@@ -154,6 +155,44 @@ scripts). Never drop it. If you wiped vLLM, re-run `scripts/01-build-vllm.sh`.
 [aiter]: https://github.com/vllm-project/vllm/issues/51136
 [invdev]: https://github.com/ROCm/ROCm/issues/4909
 [chunked]: https://github.com/vllm-project/vllm/issues/5013
+
+## dirty-llama-cpp-checkout
+
+**Symptom:** `scripts/gguf-quickstart.sh` (or `scripts/quickstart.sh`, which
+execs it) stops before building with:
+
+```
+ERROR: third_party/llama.cpp has uncommitted tracked changes;
+```
+
+**Cause:** the quickstart never discards your work. Before it switches
+llama.cpp commits — or reuses an already-checked-out one — it runs the
+dirty-tree guard and refuses while tracked files are modified: local patches,
+a hand-applied fix, a stray edit. The cold-start false positive that used to
+fire on *every* fresh clone (an index-less `--no-checkout` clone misread as
+"all 3419 files deleted") is fixed; if you see this error now, the checkout
+really is dirty. Confirm with:
+
+```bash
+git -C third_party/llama.cpp status --porcelain
+```
+
+**Fix:** keep your work or discard it, then rerun. To keep it:
+
+```bash
+git -C third_party/llama.cpp stash        # restore later: git stash pop
+bash scripts/gguf-quickstart.sh
+```
+
+To discard the changes and take the selected commit:
+
+```bash
+git -C third_party/llama.cpp checkout -- .
+bash scripts/gguf-quickstart.sh
+```
+
+The refusal itself prints the same `git status --porcelain` excerpt (first 10
+lines) and these recovery commands, so you normally do not need this page.
 
 ---
 

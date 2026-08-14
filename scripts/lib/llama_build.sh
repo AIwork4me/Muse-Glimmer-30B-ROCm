@@ -111,3 +111,28 @@ llama_has_tracked_changes() {
     ! git -C "$llama_dir" diff --quiet --ignore-submodules HEAD -- ||
         ! git -C "$llama_dir" diff --cached --quiet
 }
+
+# F-05: actionable dirty-checkout refusal. Names the situation, excerpts what
+# git actually sees, and hands the user recovery verbs plus a docs anchor
+# instead of dead-ending.
+llama_refuse_dirty_checkout() {
+    local llama_dir="$1"
+    local situation="$2"
+    local excerpt
+
+    excerpt="$(git -C "$llama_dir" status --porcelain 2>/dev/null | head -n 10 || true)"
+    {
+        echo "ERROR: $llama_dir has uncommitted tracked changes;"
+        echo "refusing to $situation (your changes are never discarded automatically)."
+        echo "git status --porcelain says (first 10 lines):"
+        if [ -n "$excerpt" ]; then
+            printf '%s\n' "$excerpt" | sed 's/^/    /'
+        else
+            echo "    (git reported no changes; inspect the checkout manually)"
+        fi
+        echo "To keep your changes:   git -C '$llama_dir' stash, then rerun this script"
+        echo "                        (git -C '$llama_dir' stash pop restores them later)."
+        echo "To discard them:        git -C '$llama_dir' checkout -- . && rerun this script."
+        echo "Details: docs/troubleshooting.md#dirty-llama-cpp-checkout"
+    } >&2
+}
