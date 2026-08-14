@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import shutil
 import subprocess
@@ -250,4 +251,56 @@ def test_python3_guard_precedes_first_manifest_read() -> None:
     first_manifest_read = src.index("read_manifest host.minimum_kernel")
     assert guard_at < first_manifest_read, (
         "the python3 guard must run before read_manifest shells out to python3"
+    )
+
+
+# ---------------------------------------------------------------------------
+# F-14: the passing-path pool line must state its thresholds and label units
+# ---------------------------------------------------------------------------
+
+
+def default_gguf_floor_gib() -> str:
+    """The default-GGUF floor exactly as the checker derives it: the manifest
+    size of muse-glimmer-30B-kquant-17gb.gguf rendered in GiB to 1 decimal."""
+    files = json.loads(
+        (ROOT / "configs/artifact-manifest.json").read_text(encoding="utf-8")
+    )["sets"]["gguf"]["files"]
+    size_bytes = next(
+        f["size_bytes"]
+        for f in files
+        if f["path"] == "muse-glimmer-30B-kquant-17gb.gguf"
+    )
+    return f"{size_bytes / 1024**3:.1f}"
+
+
+def pool_line(stdout: str) -> str:
+    return next(l for l in stdout.splitlines() if l.startswith("GPU-visible pool:"))
+
+
+def test_gguf_pool_line_states_floor_and_envelope(tmp_path: Path) -> None:
+    result = run_checker(tmp_path, profile="gguf", pool_gib=80)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = pool_line(result.stdout)
+    assert line.startswith("GPU-visible pool: 80 GiB")
+    floor = default_gguf_floor_gib()
+    assert f"default GGUF needs >= {floor} GiB GPU-visible" in line, (
+        "the passing line must carry the manifest-derived default-GGUF floor"
+    )
+    assert "validated envelope 80 GiB GPU-visible" in line
+    assert "warning boundary" in line, (
+        "the 80 GiB envelope must be labeled as a warning boundary, not a minimum"
+    )
+
+
+def test_vllm_pool_line_states_profile_floor(tmp_path: Path) -> None:
+    result = run_checker(
+        tmp_path, profile="vllm", version="7.2.1", pool_gib=80, uv_exit=0
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = pool_line(result.stdout)
+    assert line.startswith("GPU-visible pool: 80 GiB")
+    assert ">= 60 GiB GPU-visible" in line, (
+        "the non-gguf passing line must carry the profile's 60 GiB floor"
     )

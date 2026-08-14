@@ -99,6 +99,9 @@ GGUF_MODEL_BYTES="$(read_default_gguf_bytes)"
 # The published GGUF runs used the real 94 GiB Strix Halo host, whose gfx1151
 # coarse-grained pool is 80 GiB. This is a warning boundary, not a minimum.
 GGUF_REFERENCE_VISIBLE_GIB=80
+# F-14: the same manifest-derived size, rendered as the GPU-visible floor the
+# user sees next to the measured pool (GPU memory, explicitly not disk).
+GGUF_FLOOR_GIB="$(awk -v b="$GGUF_MODEL_BYTES" 'BEGIN {printf "%.1f", b / 1073741824}')"
 
 echo "Environment profile: $PROFILE"
 case "$PROFILE" in
@@ -168,7 +171,15 @@ vram_kb="$(awk '
 ' <<<"$rocminfo_out")"
 [[ "$vram_kb" =~ ^[0-9]+$ ]] ||
     fail "could not read gfx1151 global memory pool from rocminfo"
-echo "GPU-visible pool: $(( vram_kb / 1024 / 1024 )) GiB"
+pool_gib=$(( vram_kb / 1024 / 1024 ))
+
+if [ "$PROFILE" = "gguf" ]; then
+    # F-14: state the thresholds with the number on the passing path so a
+    # user can self-assess; both floors are GPU-visible memory, not disk.
+    echo "GPU-visible pool: ${pool_gib} GiB (default GGUF needs >= ${GGUF_FLOOR_GIB} GiB GPU-visible; validated envelope ${GGUF_REFERENCE_VISIBLE_GIB} GiB GPU-visible — warning boundary, not a minimum)"
+else
+    echo "GPU-visible pool: ${pool_gib} GiB (this profile requires >= ${MIN_VISIBLE_GIB} GiB GPU-visible)"
+fi
 
 if [ "$PROFILE" = "gguf" ]; then
     min_gguf_kib=$(( (GGUF_MODEL_BYTES + 1023) / 1024 ))
