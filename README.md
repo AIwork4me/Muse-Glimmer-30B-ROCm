@@ -274,6 +274,10 @@ See [ROCm 7.14 scoped validation](docs/results/rocm-7.14/README.md) and its
   use distribution-specific kernel lines; 6.16.9 is not a universal ROCm floor.
 - About 20 GiB available for the default GGUF path; at least 60 GiB
   GPU-visible unified memory for the validated BF16 path.
+- Disk (not GPU memory): the ROCm installer alone needs ~11 GiB free at its
+  transient peak — the 1.6 GiB archive under `$TMPDIR` plus the 8.3 GiB
+  extracted tree at `~/rocm-7.14.0`. The installer checks both filesystems
+  before downloading and deletes the verified archive once it succeeds.
 - Default GGUF path: git, cmake, curl, Python 3, and a gfx1151-capable HIP
   toolchain. PyTorch and uv are not required.
 - Optional vLLM path: Python 3.12, uv, and the locked TheRock runtime.

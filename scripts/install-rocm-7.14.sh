@@ -41,6 +41,48 @@ if [ -e "$PREFIX" ]; then
 fi
 
 ARCHIVE="${ROCM714_ARCHIVE:-${TMPDIR:-/tmp}/therock-dist-linux-gfx1151-7.14.0.tar.gz}"
+PARENT="$(dirname "$PREFIX")"
+mkdir -p "$PARENT"
+
+# F-03: refuse to start instead of dying mid-install with a raw curl/tar
+# "No space left on device". The download and the extraction can target
+# different filesystems ($TMPDIR vs the prefix parent), so each is checked
+# against its own worst case:
+#   - the archive filesystem must hold the tarball: the manifest's own
+#     size_bytes (1,713,449,440 = ~1.6 GiB for ROCm 7.14.0);
+#   - the prefix filesystem must hold the extracted tree: the manifest has no
+#     extracted size, so this floor is derived from the validated install
+#     (an 8.3 GiB ~/rocm-7.14.0 tree from the 1.6 GiB tarball), rounded up to
+#     9 GiB to stay honest across patch releases.
+EXTRACTED_FLOOR_BYTES=$((9 * 1024 * 1024 * 1024))
+
+require_available_bytes() {  # require_available_bytes <dir> <floor_bytes> <what> <remedy>
+    local dir="$1" floor_bytes="$2" what="$3" remedy="$4"
+    if [ ! -d "$dir" ]; then
+        echo "ERROR: directory $dir does not exist; create it and rerun." >&2
+        exit 1
+    fi
+    local df_line avail_bytes mount
+    df_line="$(df -Pk "$dir" | awk 'NR==2')"
+    avail_bytes="$(( $(printf '%s\n' "$df_line" | awk '{print $4}') * 1024 ))"
+    mount="$(printf '%s\n' "$df_line" | awk '{print $NF}')"
+    if [ "$avail_bytes" -lt "$floor_bytes" ]; then
+        printf 'ERROR: not enough disk space for %s: filesystem %s (holding %s) has %s GiB available, need at least %s GiB.\n' \
+            "$what" "$mount" "$dir" \
+            "$(awk -v b="$avail_bytes" 'BEGIN {printf "%.1f", b / 1073741824}')" \
+            "$(awk -v b="$floor_bytes" 'BEGIN {printf "%.1f", b / 1073741824}')" >&2
+        printf '       %s\n' "$remedy" >&2
+        exit 1
+    fi
+}
+
+require_available_bytes "$(dirname "$ARCHIVE")" "$SIZE" \
+    "the ROCm $ROCM_VER archive download (staged at $ARCHIVE)" \
+    "Free space on that filesystem, or set TMPDIR (or ROCM714_ARCHIVE) to a path on a larger filesystem, then rerun."
+require_available_bytes "$PARENT" "$EXTRACTED_FLOOR_BYTES" \
+    "the extracted ROCm tree at $PREFIX" \
+    "Free space on that filesystem, or set ROCM714_PREFIX to a path on a larger filesystem, then rerun."
+
 echo "Downloading ROCm $ROCM_VER gfx1151 tarball (~$((SIZE/1024/1024)) MiB) ..."
 echo "  $URL"
 curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 \
@@ -50,8 +92,6 @@ echo "Verifying size + SHA256 against $MANIFEST ..."
 [ "$(stat -c %s "$ARCHIVE")" -eq "$SIZE" ] || { echo "ERROR: size mismatch" >&2; exit 1; }
 printf '%s  %s\n' "$SHA256" "$ARCHIVE" | sha256sum -c -
 
-PARENT="$(dirname "$PREFIX")"
-mkdir -p "$PARENT"
 STAGE="$(mktemp -d "$PARENT/.rocm-7.14.0.XXXXXX")"
 trap 'rm -rf -- "$STAGE"' EXIT
 echo "Extracting → $PREFIX ..."

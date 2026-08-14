@@ -304,3 +304,73 @@ def test_failed_verification_keeps_the_archive_for_inspection(
     assert archive.exists(), (
         "failure paths must keep the archive so it can be inspected/retried"
     )
+
+
+# ---------------------------------------------------------------------------
+# F-03: an upfront disk-space preflight instead of a mid-install ENOSPC
+# ---------------------------------------------------------------------------
+
+ONE_GIB_KB = 1024 * 1024
+
+
+def test_insufficient_archive_space_refuses_before_downloading(
+    tmp_path: Path,
+) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    tmpdir = tmp_path / "tmpdir"
+    tmpdir.mkdir()
+    out = tmp_path / "out"
+    out.mkdir()
+    # 1 GiB free where the archive would land, plenty where the tree would.
+    install_fake_df(bindir, {"*/tmpdir*": ONE_GIB_KB}, GENEROUS_DF_KB)
+    tarball = make_tarball(tmp_path)
+    install_fake_curl(bindir, tarball)
+    # Manifest floor of 5 GiB for the archive filesystem.
+    manifest = write_manifest(tmp_path, tarball, size_bytes=5 * 1024**3)
+    archive = tmpdir / "archive.tar.gz"
+
+    result = run_installer(
+        tmp_path, manifest=manifest, prefix=out / "rocm", archive=archive
+    )
+
+    assert result.returncode == 1
+    assert "not enough disk space" in result.stderr
+    assert str(tmpdir) in result.stderr, "must name the target filesystem path"
+    assert "5.0 GiB" in result.stderr, "must state required space"
+    assert "1.0 GiB" in result.stderr, "must state available space"
+    assert "TMPDIR" in result.stderr, "must offer the TMPDIR escape hatch"
+    assert "Downloading" not in result.stdout, "must refuse before downloading"
+    assert not archive.exists()
+
+
+def test_insufficient_prefix_space_refuses_before_downloading(
+    tmp_path: Path,
+) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    tmpdir = tmp_path / "tmpdir"
+    tmpdir.mkdir()
+    out = tmp_path / "out"
+    out.mkdir()
+    # Plenty for the small stub archive, only 4 GiB for the extracted tree.
+    install_fake_df(bindir, {"*/out*": 4 * ONE_GIB_KB}, GENEROUS_DF_KB)
+    tarball = make_tarball(tmp_path)
+    install_fake_curl(bindir, tarball)
+    manifest = write_manifest(tmp_path, tarball)
+    archive = tmpdir / "archive.tar.gz"
+
+    result = run_installer(
+        tmp_path, manifest=manifest, prefix=out / "rocm", archive=archive
+    )
+
+    assert result.returncode == 1
+    assert "not enough disk space" in result.stderr
+    assert str(out) in result.stderr
+    assert "9.0 GiB" in result.stderr, (
+        "extracted-tree floor is 9 GiB (8.3 GiB validated tree, rounded up)"
+    )
+    assert "4.0 GiB" in result.stderr
+    assert "ROCM714_PREFIX" in result.stderr, "must offer the prefix escape hatch"
+    assert "Downloading" not in result.stdout
+    assert not archive.exists()
