@@ -18,6 +18,7 @@ Every gotcha we hit, as **symptom → cause → fix**. Skim the left column.
 | rocm-smi shows ~1 GiB but model is 16+ GiB | [#memory-footprint-apu](#memory-footprint-apu) |
 | `finish_reason: length` / empty `content` | [#reasoning-length](#reasoning-length) |
 | gguf-quickstart refuses: llama.cpp has tracked changes | [#dirty-llama-cpp-checkout](#dirty-llama-cpp-checkout) |
+| `required command not found: git/cmake/curl/python3` | [#missing-tool](#missing-tool) |
 
 ---
 
@@ -193,6 +194,33 @@ bash scripts/gguf-quickstart.sh
 
 The refusal itself prints the same `git status --porcelain` excerpt (first 10
 lines) and these recovery commands, so you normally do not need this page.
+
+## missing-tool
+
+**Symptom:** `install-rocm-7.14.sh`, `00-check-env.sh`, or
+`gguf-quickstart.sh` stops with
+
+```
+ERROR: required command not found: <tool>      # installer, quickstart
+FAIL: required command not found: <tool>       # environment checker
+```
+
+for one of `git`, `cmake`, `curl`, or `python3`.
+
+**Cause:** the default GGUF path needs those four host tools on `PATH` before
+anything else: the installer guards `python3` and `curl` before it reads its
+manifest, the checker itemizes all four (so its OK verdict means the
+quickstart will not die on a missing command), and the quickstart checks all
+four after resolving the ROCm toolchain.
+
+**Fix:** install the missing tool for your distro — the same one-liners the
+failure text prints:
+
+```bash
+sudo apt-get install git cmake curl python3   # Debian/Ubuntu
+sudo dnf install git cmake curl python3       # Fedora/RHEL
+sudo pacman -S git cmake curl python3         # Arch
+```
 
 ---
 

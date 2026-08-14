@@ -8,6 +8,8 @@ the docs promise behavior the scripts rely on, so pin the promise.
 F-06/F-07/F-08 - the Quick start must carry the user past a bare server URL:
 second-terminal guidance, a verified health + completion request pair, and the
 reasoning-first `max_tokens` warning that keeps a first completion non-empty.
+F-13 - per-distro host-tool one-liners must exist in README and match the
+wording the scripts print on ``required command not found``.
 """
 from pathlib import Path
 
@@ -51,3 +53,22 @@ def test_quickstart_documents_reasoning_first_behavior() -> None:
     assert 'finish_reason:"length"' in quickstart
     assert "max_tokens` ≥ 512" in quickstart
     assert "troubleshooting.md#reasoning-length" in quickstart
+
+
+def test_requirements_have_per_distro_tool_install_one_liners() -> None:
+    requirements = _src("README.md").split(
+        "## Requirements and operating notes", 1
+    )[1]
+    # F-13: same verbs the scripts print on failure (apt-get/dnf/pacman).
+    assert "sudo apt-get install git cmake curl python3" in requirements
+    assert "sudo dnf install git cmake curl python3" in requirements
+    assert "sudo pacman -S git cmake curl python3" in requirements
+
+
+def test_troubleshooting_has_missing_tool_entry() -> None:
+    doc = _src("docs/troubleshooting.md")
+    assert "## missing-tool" in doc
+    assert "[#missing-tool](#missing-tool)" in doc
+    # Discoverable from the checker/installer wording (they print
+    # "required command not found: <tool>" and point at this file bare).
+    assert "required command not found" in doc

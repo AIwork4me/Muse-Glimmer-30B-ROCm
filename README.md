@@ -308,7 +308,16 @@ See [ROCm 7.14 scoped validation](docs/results/rocm-7.14/README.md) and its
   extracted tree at `~/rocm-7.14.0`. The installer checks both filesystems
   before downloading and deletes the verified archive once it succeeds.
 - Default GGUF path: git, cmake, curl, Python 3, and a gfx1151-capable HIP
-  toolchain. PyTorch and uv are not required.
+  toolchain. PyTorch and uv are not required. If one of the four host tools is
+  missing, the scripts stop with `required command not found` and print these
+  same one-liners:
+
+  ```bash
+  sudo apt-get install git cmake curl python3   # Debian/Ubuntu
+  sudo dnf install git cmake curl python3       # Fedora/RHEL
+  sudo pacman -S git cmake curl python3         # Arch
+  ```
+
 - Optional vLLM path: Python 3.12, uv, and the locked TheRock runtime.
   uv run --no-sync remains required after the editable vLLM source install.
 
