@@ -86,3 +86,28 @@ llama_build_fingerprint_matches() {
 
     [ -f "$recorded" ] && cmp -s "$expected" "$recorded"
 }
+
+# True when $1 is the state gguf-quickstart.sh's own clone command creates:
+# `git clone --filter=blob:none --no-checkout` leaves an empty worktree and no
+# index file, which git's diff machinery misreads as every tracked path
+# staged-deleted. That state cannot contain user work, so guards must not
+# treat it as dirty (F-04).
+llama_is_indexless_empty_clone() {
+    local llama_dir="$1"
+
+    [ -d "$llama_dir/.git" ] && [ ! -f "$llama_dir/.git/index" ] &&
+        [ -z "$(find "$llama_dir" -mindepth 1 -maxdepth 1 \
+            -not -name .git -print -quit 2>/dev/null)" ]
+}
+
+# Exit 0 when $1 has uncommitted tracked changes (worktree or index) that the
+# quickstart must refuse to touch; exit 1 when it is safe to switch commits.
+llama_has_tracked_changes() {
+    local llama_dir="$1"
+
+    if llama_is_indexless_empty_clone "$llama_dir"; then
+        return 1
+    fi
+    ! git -C "$llama_dir" diff --quiet --ignore-submodules HEAD -- ||
+        ! git -C "$llama_dir" diff --cached --quiet
+}

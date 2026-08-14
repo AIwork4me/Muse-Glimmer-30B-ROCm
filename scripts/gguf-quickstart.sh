@@ -79,7 +79,7 @@ fi
 echo "llama.cpp build : $BUILD_DIR"
 
 # Clone once, then fetch and detach at the selected ref on every run. Existing
-# uncommitted llama.cpp changes are never deleted; checkout fails instead.
+# uncommitted llama.cpp changes are never deleted; the guard refuses instead.
 if [ ! -d "$LLAMA/.git" ]; then
     if [ -e "$LLAMA" ] && [ -n "$(find "$LLAMA" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
         echo "ERROR: $LLAMA exists but is not a git checkout; move it aside first." >&2
@@ -87,18 +87,22 @@ if [ ! -d "$LLAMA/.git" ]; then
     fi
     mkdir -p "$HERE/third_party"
     git clone --filter=blob:none --no-checkout "$LLAMA_CPP_REPO" "$LLAMA"
+    # F-04: this clone is seconds old and empty by construction (no index, no
+    # worktree), so it cannot hold user changes. Reach the selected ref now,
+    # before any dirty-tree guard can misread that state as every tracked
+    # path staged-deleted and dead-end each cold start.
+    git -C "$LLAMA" fetch --depth 1 "$LLAMA_CPP_REPO" "$LLAMA_CPP_REF"
+    git -C "$LLAMA" checkout --detach FETCH_HEAD
 fi
 CURRENT_LLAMA_CPP_COMMIT="$(git -C "$LLAMA" rev-parse HEAD 2>/dev/null || true)"
 if [ "$CURRENT_LLAMA_CPP_COMMIT" != "$LLAMA_CPP_REF" ]; then
-    if ! git -C "$LLAMA" diff --quiet --ignore-submodules HEAD -- ||
-       ! git -C "$LLAMA" diff --cached --quiet; then
+    if llama_has_tracked_changes "$LLAMA"; then
         echo "ERROR: $LLAMA has tracked changes; refusing to change commits." >&2
         exit 1
     fi
     git -C "$LLAMA" fetch --depth 1 "$LLAMA_CPP_REPO" "$LLAMA_CPP_REF"
     git -C "$LLAMA" checkout --detach FETCH_HEAD
-elif ! git -C "$LLAMA" diff --quiet --ignore-submodules HEAD -- ||
-     ! git -C "$LLAMA" diff --cached --quiet; then
+elif llama_has_tracked_changes "$LLAMA"; then
     echo "ERROR: validated llama.cpp checkout has tracked modifications." >&2
     exit 1
 else
