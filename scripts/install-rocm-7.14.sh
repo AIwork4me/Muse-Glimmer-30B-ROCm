@@ -102,14 +102,29 @@ curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 \
     --output "$ARCHIVE" "$URL"
 
 echo "Verifying size + SHA256 against $MANIFEST ..."
-[ "$(stat -c %s "$ARCHIVE")" -eq "$SIZE" ] || { echo "ERROR: size mismatch" >&2; exit 1; }
-printf '%s  %s\n' "$SHA256" "$ARCHIVE" | sha256sum -c -
+# F-15: each verification failure states expected vs got and the next action;
+# the partial archive is deliberately kept so it can be inspected/retried.
+ACTUAL_SIZE="$(stat -c %s "$ARCHIVE")"
+if [ "$ACTUAL_SIZE" -ne "$SIZE" ]; then
+    echo "ERROR: downloaded archive size mismatch: expected $SIZE bytes, got $ACTUAL_SIZE bytes." >&2
+    echo "       Delete the partial archive and rerun: rm -f $ARCHIVE" >&2
+    exit 1
+fi
+if ! printf '%s  %s\n' "$SHA256" "$ARCHIVE" | sha256sum -c -; then
+    echo "ERROR: SHA256 mismatch for $ARCHIVE: expected $SHA256, got $(sha256sum "$ARCHIVE" | awk '{print $1}')." >&2
+    echo "       Delete the partial archive and rerun: rm -f $ARCHIVE" >&2
+    exit 1
+fi
 
 STAGE="$(mktemp -d "$PARENT/.rocm-7.14.0.XXXXXX")"
 trap 'rm -rf -- "$STAGE"' EXIT
 echo "Extracting → $PREFIX ..."
 tar -xf "$ARCHIVE" -C "$STAGE"
-[ -x "$STAGE/bin/hipcc" ] || { echo "ERROR: extracted tarball has no bin/hipcc" >&2; exit 1; }
+if [ ! -x "$STAGE/bin/hipcc" ]; then
+    echo "ERROR: extraction incomplete: no bin/hipcc under $STAGE after tar (partial staging tree removed)." >&2
+    echo "       Check free disk space, then rerun; move $PREFIX aside first if it was left behind." >&2
+    exit 1
+fi
 mv "$STAGE" "$PREFIX"
 trap - EXIT
 

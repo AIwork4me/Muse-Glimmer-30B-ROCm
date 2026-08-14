@@ -433,3 +433,79 @@ def test_tool_guard_precedes_first_manifest_read() -> None:
     assert guard_at < first_read_at, (
         "the python3/curl guard must run before the manifest is read"
     )
+
+
+# ---------------------------------------------------------------------------
+# F-15: failure exits must carry expected-vs-got values and a next action
+# ---------------------------------------------------------------------------
+
+
+def test_size_mismatch_prints_expected_actual_bytes_and_action(
+    tmp_path: Path,
+) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    install_fake_df(bindir, {}, GENEROUS_DF_KB)
+    tarball = make_tarball(tmp_path)
+    install_fake_curl(bindir, tarball)
+    wrong_size = tarball.stat().st_size + 12345
+    manifest = write_manifest(tmp_path, tarball, size_bytes=wrong_size)
+    archive = tmp_path / "archive.tar.gz"
+
+    result = run_installer(tmp_path, manifest=manifest, archive=archive)
+
+    assert result.returncode == 1
+    assert f"expected {wrong_size} bytes" in result.stderr
+    assert f"got {tarball.stat().st_size} bytes" in result.stderr
+    assert "rm -f" in result.stderr, "must give the delete-and-rerun action"
+    assert str(archive) in result.stderr
+    assert archive.exists(), "partial archive stays for inspection"
+
+
+def test_sha_mismatch_prints_expected_actual_hash_and_action(
+    tmp_path: Path,
+) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    install_fake_df(bindir, {}, GENEROUS_DF_KB)
+    tarball = make_tarball(tmp_path)
+    install_fake_curl(bindir, tarball)
+    expected_sha = "0" * 64
+    manifest = write_manifest(tmp_path, tarball, sha256=expected_sha)
+    archive = tmp_path / "archive.tar.gz"
+
+    result = run_installer(tmp_path, manifest=manifest, archive=archive)
+
+    assert result.returncode == 1
+    assert expected_sha in result.stderr
+    actual_sha = hashlib.sha256(tarball.read_bytes()).hexdigest()
+    assert actual_sha in result.stderr, "must show the hash actually computed"
+    assert "rm -f" in result.stderr
+    assert str(archive) in result.stderr
+    assert archive.exists()
+
+
+def test_missing_hipcc_after_extract_names_state_and_action(
+    tmp_path: Path,
+) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    install_fake_df(bindir, {}, GENEROUS_DF_KB)
+    tarball = make_tarball(tmp_path, with_hipcc=False)
+    install_fake_curl(bindir, tarball)
+    manifest = write_manifest(tmp_path, tarball)
+    prefix = tmp_path / "rocm"
+    archive = tmp_path / "archive.tar.gz"
+
+    result = run_installer(
+        tmp_path, manifest=manifest, prefix=prefix, archive=archive
+    )
+
+    assert result.returncode == 1
+    assert "extraction incomplete" in result.stderr
+    assert str(prefix) in result.stderr, "must name the prefix in the recovery"
+    assert "rerun" in result.stderr
+    assert not prefix.exists()
+    leftovers = list(tmp_path.glob(".rocm-7.14.0.*"))
+    assert leftovers == [], f"partial staging tree must be cleaned up: {leftovers}"
+    assert archive.exists(), "failure paths keep the archive"
