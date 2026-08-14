@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Audit target is **GitHub `master` = `263e9b7ef282e1d123f0188df7f37b894f76e21e`**, cloned fresh from `https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm.git`.
+- Audit target is **GitHub `master` = `0a35719d592a8a33dd6a781ce0365d12d661df0e`** (re-pinned by maintainer ruling 2026-08-14: master advanced to the released v0.1.0 state after this plan was written; the new-user-today sha governs), cloned fresh from `https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm.git`.
 - **Knowledge boundary:** only README + README-linked docs. Consulting a linked doc when stuck is allowed but is logged as a One-Pass breach (finding or breach note).
 - **Never touch `/opt/rocm`. Never modify `~/rocm-7.14.0.dev-backup` until Task 11.**
 - Fixes must not alter `docs/results/` data or validated `configs/` (`public-claims.json`, `validated-stack.json`, `artifact-manifest.json`), nor pinned llama.cpp/GGUF revisions.
@@ -92,7 +92,7 @@ printf 'phase\tstart\tend\tseconds\n' > "$WS/timings.tsv"
 
 **Interfaces:**
 - Consumes: `$WS` from Task 1.
-- Produces: `$CLONE` at sha `263e9b7…`; `$LOGS/p0-clone.log`.
+- Produces: `$CLONE` at sha `0a35719…`; `$LOGS/p0-clone.log`.
 
 - [ ] **Step 1: Clone exactly as the README shows**
 
@@ -107,7 +107,7 @@ cd "$WS"
 git -C "$CLONE" rev-parse HEAD
 ```
 
-Expected: `263e9b7ef282e1d123f0188df7f37b894f76e21e`. If different — STOP, confirm with maintainer which commit to audit before continuing (record as context, not a finding).
+Expected: `0a35719d592a8a33dd6a781ce0365d12d661df0e`. If different — STOP, confirm with maintainer which commit to audit before continuing (record as context, not a finding).
 
 - [ ] **Step 3: Log the step** — append the `[P1.clone]` entry to `audit-log.md` per the scaffold format (expected: clone works; actual: observed; friction: note anything unexpected, e.g. clone size warnings).
 
