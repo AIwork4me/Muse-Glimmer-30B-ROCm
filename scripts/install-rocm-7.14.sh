@@ -7,11 +7,12 @@
 #
 # Idempotent: if ~/rocm-7.14.0/bin/hipcc already exists, this is a no-op.
 # Usage: bash scripts/install-rocm-7.14.sh [ROCM714_PREFIX]
-#   ROCM714_PREFIX=/path   override the install prefix
-#   ROCM714_ARCHIVE=/path  override the download location
+#   ROCM714_PREFIX=/path    override the install prefix
+#   ROCM714_ARCHIVE=/path   override the download location
+#   ROCM714_MANIFEST=/path  override the manifest (test seam for the harness)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-MANIFEST="$HERE/configs/rocm-7.14-gguf-validation.json"
+MANIFEST="${ROCM714_MANIFEST:-$HERE/configs/rocm-7.14-gguf-validation.json}"
 
 read_field() {
     python3 - "$MANIFEST" "$1" <<'PY'
@@ -62,4 +63,9 @@ trap - EXIT
 echo "Installed ROCm $ROCM_VER at $PREFIX. Activate in a shell with:"
 echo "  export PATH=\"$PREFIX/bin:\$PATH\""
 echo "  export LD_LIBRARY_PATH=\"$PREFIX/lib:\${LD_LIBRARY_PATH:-}\""
-"$PREFIX/bin/hipcc" --version | head -1
+# F-01: this tail used to pipe hipcc --version into `head -1` - the only
+# pipeline in the script. hipcc emits several lines, head exits after the
+# first and closes the pipe, hipcc takes SIGPIPE, and `set -o pipefail`
+# promoted it to exit 141 after a fully successful install. Capture the
+# output first, then print line 1 with no pipe in sight.
+head -1 <<<"$("$PREFIX/bin/hipcc" --version)"
