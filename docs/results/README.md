@@ -7,13 +7,15 @@ ROCm 7.2.1 is the fully-validated historical reference (supplementary).
 ## ROCm 7.14 gfx1151 — recommended default (scoped project validation)
 
 Status: **GGUF/llama.cpp reduced matrix project-validated (2026-08-13);
-BF16/vLLM evaluated and not pursued (no 7.14 compute gain).** This is not a
-global ROCm 7.14 validation claim.
+optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM validation
+pending.** Current proxy results did not justify prioritizing that rebuild; this
+is not a global ROCm 7.14 validation or permanent vLLM value claim.
 
 The 17-cell run used AMD's official gfx1151 ROCm 7.14.0 tarball on Ryzen AI
-MAX+ PRO 395 / Radeon 8060S. AMD's 7.14 release notes do not list this exact
-SKU, so the hardware result is project evidence rather than an AMD support
-claim. Mean TPOT deltas were −0.4% at `np=1` and −1.7% at `np=4`; all 17 cells
+MAX+ PRO 395 / Radeon 8060S. AMD's [ROCm 7.14 release notes](https://rocm.docs.amd.com/en/docs-7.14.0/about/release-notes.html)
+list that platform as `gfx1151`. Muse-Glimmer workload behavior, performance,
+DFlash, and vision evidence here are independent project results, not AMD
+workload-support claims. Mean TPOT deltas were −0.4% at `np=1` and −1.7% at `np=4`; all 17 cells
 had a lower VmPeak mapped-address-space envelope (mean −2.8%). DFlash acceptance
 rates were similar, with the largest observed difference 1.21 percentage
 points. No incident was observed during the six-hour run, but raw system logs

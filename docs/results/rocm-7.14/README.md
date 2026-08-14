@@ -2,9 +2,14 @@
 
 This repository project-validated a reduced **GGUF/llama.cpp** matrix using
 AMD's official ROCm 7.14.0 gfx1151 tarball on Ryzen AI MAX+ PRO 395 / Radeon
-8060S. AMD's ROCm 7.14 release notes describe gfx1151 support but do not list
-this exact 395 SKU; this is project evidence, not an AMD SKU-support claim.
-The BF16/vLLM track was evaluated and is not pursued (rocBLAS BF16-GEMM proxy: no 7.14 compute gain over 7.2.1); vLLM/BF16 stays on the 7.2.1 reference.
+8060S. AMD's [ROCm 7.14 release notes](https://rocm.docs.amd.com/en/docs-7.14.0/about/release-notes.html)
+list that exact platform as `gfx1151`; AMD's [GPU specifications](https://rocm.docs.amd.com/en/latest/reference/gpu-arch-specs.html)
+also map the 395 / 8060S to RDNA 3.5 and `gfx1151`. Muse-Glimmer workload
+validation and benchmark evidence here are independent project results.
+**Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM validation
+pending.** Historical vLLM/BF16 remains validated on the 7.2.1 reference.
+Current rocBLAS BF16-GEMM proxy results did not justify prioritizing a 7.14
+rebuild; they do not establish zero value for a future cohesive 7.14 stack.
 
 The historical ROCm 7.2.1 evidence remains in `../matrix/`. The 17 ROCm 7.14
 cells remain in `../matrix-714/`; all four `np=16` cells were intentionally
@@ -174,11 +179,12 @@ hipcc --version
   finish reasons and recorded temperature; stability evidence is operator-level.
 - [x] Every new cell carries `manifest.rocm_version = "7.14.0"`.
 
-## Phase 4 — BF16/vLLM: evaluated, **not pursued** (no 7.14 compute benefit)
+## Phase 4 — BF16/vLLM: proxy evaluated; validation pending
 
-Phase 4 (rebuild vLLM/BF16 against 7.14) was **decided against** after a minimal
-predictive test showed 7.14 brings no BF16-compute gain, so it would not improve
-the user's vLLM experience. Rationale:
+The full ROCm 7.14 Muse-Glimmer vLLM rebuild and validation was not prioritized
+for v0.1. A minimal proxy did not show a consistent BF16-compute improvement
+across the sampled GEMM shapes. The proxy informed prioritization; it is not a
+statistical equivalence test or a validation of a future cohesive stack:
 
 - vLLM BF16 at **c=1 is bandwidth-bound** (4.2 tok/s ≈ the 56 GB-BF16/token
   bandwidth ceiling) — unchanged by ROCm version.
@@ -193,11 +199,11 @@ the user's vLLM experience. Rationale:
 | 12288³ | 3.1 TFLOPS | 2.9 TFLOPS | −6% |
 | **mean** | **3.4** | **3.5** | **≈ +2% (noise)** |
 
-**No systematic BF16-compute improvement** — both versions sit at the same RDNA 3.5
-gfx1151 compute ceiling (~3–4 BF16 TFLOPS). A ~1–2 h vLLM rebuild would yield zero
-user-perceivable speedup, so — per the UX-first principle — Phase 4 is **not
-pursued** and is **not surfaced as a recommended path**. vLLM/BF16 stays on the
-validated 7.2.1 reference; speed-focused users use the Q4/llama.cpp path.
+The sampled proxy showed no consistent direction: one shape improved, one was
+flat, and one regressed. Those current results did not justify prioritizing the
+ROCm 7.14 vLLM rebuild for v0.1. They do not prove that a future cohesive ROCm
+7.14 vLLM stack has zero user-perceivable value. Historical vLLM/BF16 validation
+stays on the 7.2.1 reference; the default single-user path is Q4/llama.cpp.
 
 Reproduce the proxy:
 
@@ -221,4 +227,5 @@ only when:
 - the ROCm 7.2.1 history remains unchanged: ✓
 
 **GGUF/llama.cpp status: project-validated within the recorded 17-cell scope.**
-The BF16/vLLM track was evaluated and is not pursued (no 7.14 compute gain); the four `np=16` cells remain deferred.
+**Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM validation
+pending.** The four `np=16` GGUF cells remain deferred.

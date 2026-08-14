@@ -95,6 +95,23 @@ def cell_label(rec) -> str:
     return f"{w} np{rec['np']}{tag}{vis}"
 
 
+def tpot_deltas_by_concurrency(a: dict, b: dict) -> dict[int, list[float]]:
+    """Return comparable, non-pathological TPOT deltas grouped by concurrency."""
+    grouped: dict[int, list[float]] = {}
+    for key in sorted(set(a) & set(b)):
+        before, after = a[key], b[key]
+        if before.get("pathological") or after.get("pathological"):
+            continue
+        tpot_before = num(before, "metrics", "tpot_median")
+        tpot_after = num(after, "metrics", "tpot_median")
+        if tpot_before is None or tpot_after is None:
+            continue
+        delta = pct(tpot_before, tpot_after)
+        if delta is not None:
+            grouped.setdefault(key[2], []).append(delta)
+    return grouped
+
+
 METRICS = [
     # (header, JSON path, display precision, display scale)
     ("aggregate tok/s", ("metrics", "agg_tok_s"), 2, 1.0),
@@ -112,18 +129,7 @@ def render(a: dict, b: dict, la: str, lb: str) -> str:
     lines.append(f"- **{la}:** {len(a)} cells   **{lb}:** {len(b)} cells   **compared:** {len(set(a) & set(b))}\n")
 
     # TPOT is less confounded by sampling-length divergence than aggregate tok/s.
-    d_tpot = {}
-    for k in keys:
-        ra, rb = a.get(k), b.get(k)
-        if not (ra and rb):
-            continue
-        if ra.get("pathological") or rb.get("pathological"):
-            continue
-        ta = num(ra, "metrics", "tpot_median")
-        tb = num(rb, "metrics", "tpot_median")
-        if ta is not None and tb is not None:
-            d_tpot.setdefault(k[2], []).append(pct(ta, tb))
-
+    d_tpot = tpot_deltas_by_concurrency(a, b)
     if d_tpot:
         lines.append("## Summary (TPOT, both arms measured)\n")
         lines.append("- TPOT is the primary, less length-confounded cross-version metric; "

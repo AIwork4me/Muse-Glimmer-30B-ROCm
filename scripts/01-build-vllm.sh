@@ -54,9 +54,11 @@ export PATH="$HOME/.local/bin:$PATH"
 # is backward compatible, and vLLM only uses stable HIP APIs.
 #
 # vLLM/BF16 deliberately builds against the 7.2.1 host toolchain (/opt/rocm),
-# NOT 7.14: this path is demoted to "pending" and the GGUF/llama.cpp path is the
-# default (it defaults to ~/rocm-7.14.0 via gguf-quickstart.sh). A rocBLAS
-# BF16-GEMM proxy showed no 7.14 compute gain, so there is no reason to move it.
+# NOT 7.14: this script reproduces the validated historical stack. The
+# GGUF/llama.cpp path defaults to ~/rocm-7.14.0; ROCm 7.14 Muse-Glimmer vLLM
+# validation is optional / not prioritized for v0.1 and pending. Current
+# rocBLAS BF16-GEMM proxy results did not justify prioritizing that rebuild;
+# they do not rule out value from a future cohesive 7.14 stack.
 # ROCM_PATH is exported so torch.utils.cpp_extension.ROCM_HOME picks it up and
 # setup.py forwards it to cmake as -DROCM_PATH=.
 export ROCM_PATH="${ROCM_PATH:-/opt/rocm}"

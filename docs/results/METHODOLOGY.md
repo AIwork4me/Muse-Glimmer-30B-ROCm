@@ -28,7 +28,7 @@ every listed version is the current upstream release.
 | GPU | AMD Radeon 8060S, **gfx1151** (RDNA 3.5), 40 CUs |
 | Memory | 94 GiB unified LPDDR5X (~215 GB/s unified fabric) |
 | ROCm | 7.2.1 (community-verified for gfx1151) |
-| Kernel | `6.17.0-1032-oem` (≥ 6.16.9 required — fixes the UMA accounting bug) |
+| Kernel | `6.17.0-1032-oem` (project reference floor ≥ 6.16.9 for the observed UMA issue; not a universal ROCm requirement) |
 | llama.cpp | **v1, commit `0b1bad14ff204627636aeb1de22ddcd5acb859d4`**, HIP build, `-DAMDGPU_TARGETS=gfx1151` |
 | Server binary | `third_party/llama.cpp/build/bin/llama-server` |
 | Weights | `meta-models/Muse-Glimmer-30B-GGUF` — see [`matrix/gguf-manifest.md`](matrix/gguf-manifest.md) |
@@ -359,8 +359,9 @@ validated GPU stack.
 5. **`power_w` is null** — the APU does not expose the relevant rocm-smi key;
    `temp_c` is captured (58–63 °C, no throttling).
 6. **This directory remains ROCm 7.2.1 evidence.** ROCm 7.14.0 has a separate,
-   scoped 17-cell GGUF matrix; all four `np=16` cells and the vLLM/BF16 track
-   remain deferred/pending. See [`rocm-7.14/README.md`](rocm-7.14/README.md).
+   scoped 17-cell GGUF matrix; all four `np=16` GGUF cells remain deferred.
+   ROCm 7.14 Muse-Glimmer vLLM validation is optional / not prioritized for v0.1
+   and pending. See [`rocm-7.14/README.md`](rocm-7.14/README.md).
 7. **`llama-bench` cross-check is non-DFlash.** `llama-bench` has no `-md`
    support in this build, so the optional cross-check (`matrix/llama-bench.json`,
    pp512 / tg128) validates only the model-level baseline decode, not spec-decode.

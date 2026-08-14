@@ -3,7 +3,9 @@
 import json
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema.exceptions import ValidationError
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
@@ -82,3 +84,47 @@ def test_hardware_submission_schema_accepts_documented_shape():
     }
     schema = read_json(SCHEMAS / "hardware-validation.schema.json")
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(sample)
+
+
+def test_public_claim_schema_accepts_future_hardware_and_track():
+    claims = read_json(ROOT / "configs/public-claims.json")
+    claims["hardware_matrix"].append(
+        {
+            "hardware": "Future Radeon",
+            "gpu_arch": "gfx9999",
+            "status": "validated",
+            "evidence": "hardware-validation/future/manifest.json",
+        }
+    )
+    claims["forward_validation"].update(
+        {
+            "rocm": "8.0.0",
+            "manifest": "configs/future-validation.json",
+        }
+    )
+    claims["forward_validation"]["tracks"].append(
+        {
+            "name": "Future backend",
+            "status": "pending",
+            "scope": "synthetic future scope",
+            "evidence": None,
+        }
+    )
+
+    schema = read_json(SCHEMAS / "public-claims.schema.json")
+    Draft202012Validator(schema).validate(claims)
+
+
+def test_public_claim_schema_rejects_validated_hardware_without_evidence():
+    claims = read_json(ROOT / "configs/public-claims.json")
+    claims["hardware_matrix"].append(
+        {
+            "hardware": "Unevidenced Radeon",
+            "gpu_arch": "gfx9998",
+            "status": "validated",
+        }
+    )
+
+    schema = read_json(SCHEMAS / "public-claims.schema.json")
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema).validate(claims)

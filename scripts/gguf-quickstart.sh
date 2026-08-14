@@ -15,23 +15,14 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$HERE"
 export PATH="$HOME/.local/bin:$PATH"
 
-# ROCm toolchain: the official 7.14.0 gfx1151 install at ~/rocm-7.14.0
-# (set up by scripts/install-rocm-7.14.sh) is the DEFAULT; if it is absent we
-# fall back to the system /opt/rocm (7.2.1, the historical reference). Override
-# explicitly with ROCM_PREFIX=/path.
-if [ -n "${ROCM_PREFIX:-}" ]; then
-    : # explicit override
-elif [ -x "$HOME/rocm-7.14.0/bin/hipcc" ]; then
-    ROCM_PREFIX="$HOME/rocm-7.14.0"
-else
-    ROCM_PREFIX="/opt/rocm"
-fi
-if [ ! -x "$ROCM_PREFIX/bin/hipcc" ]; then
-    echo "ERROR: no hipcc at $ROCM_PREFIX/bin/hipcc." >&2
-    [ "$ROCM_PREFIX" = "$HOME/rocm-7.14.0" ] && \
-        echo "       Install it: bash scripts/install-rocm-7.14.sh   (or ROCM_PREFIX=/opt/rocm to use 7.2.1)" >&2
-    exit 1
-fi
+# Use the same selection policy and diagnostics as the environment checker.
+# shellcheck source=scripts/lib/rocm.sh
+source "$HERE/scripts/lib/rocm.sh"
+# shellcheck source=scripts/lib/llama_build.sh
+source "$HERE/scripts/lib/llama_build.sh"
+resolve_rocm_prefix || exit 1
+rocm_ver="$(detect_rocm_version "$ROCM_PREFIX")"
+print_selected_rocm "$rocm_ver"
 export PATH="$ROCM_PREFIX/bin:$PATH"
 export LD_LIBRARY_PATH="$ROCM_PREFIX/lib:${LD_LIBRARY_PATH:-}"
 
@@ -56,14 +47,10 @@ LLAMA="$HERE/third_party/llama.cpp"
 LLAMA_CPP_REPO="${LLAMA_CPP_REPO:-$(stack_value llama_cpp.source_repo)}"
 VALIDATED_LLAMA_CPP_REF="$(stack_value llama_cpp.commit)"
 LLAMA_CPP_REF="${LLAMA_CPP_REF:-$VALIDATED_LLAMA_CPP_REF}"
-# Default build dir tracks the selected ROCm so a 7.14 build and a 7.2.1 build
-# never clobber each other (build-714 vs build). LLAMA_CPP_BUILD_DIR overrides.
-case "$ROCM_PREFIX" in
-    */rocm-7.14.0) DEFAULT_BUILD_DIR="$LLAMA/build-714" ;;
-    *)             DEFAULT_BUILD_DIR="$LLAMA/build" ;;
-esac
-BUILD_DIR="${LLAMA_CPP_BUILD_DIR:-$DEFAULT_BUILD_DIR}"
-BUILD_STAMP="$BUILD_DIR/.muse-llama-ref"
+AMDGPU_TARGET="gfx1151"
+ROCM_BUILD_PREFIX="$(canonical_rocm_prefix "$ROCM_PREFIX")"
+BUILD_DIR="$(llama_build_dir "$LLAMA" "$ROCM_PREFIX" "$rocm_ver" "${LLAMA_CPP_BUILD_DIR:-}")"
+BUILD_FINGERPRINT="$BUILD_DIR/.muse-build-fingerprint.json"
 
 GGUF_REPO="$(stack_value model.gguf_id)"
 VALIDATED_GGUF_REVISION="$(stack_value model.gguf_revision)"
@@ -89,6 +76,7 @@ if [ "$GGUF_REVISION" = "$VALIDATED_GGUF_REVISION" ]; then
 else
     echo "GGUF track      : latest/experimental override"
 fi
+echo "llama.cpp build : $BUILD_DIR"
 
 # Clone once, then fetch and detach at the selected ref on every run. Existing
 # uncommitted llama.cpp changes are never deleted; checkout fails instead.
@@ -124,17 +112,34 @@ if [[ "$LLAMA_CPP_REF" =~ ^[0-9a-fA-F]{40}$ ]] &&
 fi
 echo "llama.cpp commit: $ACTUAL_LLAMA_CPP_COMMIT"
 
-previous_build_commit=""
-[ -f "$BUILD_STAMP" ] && previous_build_commit="$(<"$BUILD_STAMP")"
-if [ ! -x "$BUILD_DIR/bin/llama-server" ] ||    [ "$previous_build_commit" != "$ACTUAL_LLAMA_CPP_COMMIT" ]; then
-    echo "Building llama.cpp (HIP, gfx1151) ..."
-    cmake -S "$LLAMA" -B "$BUILD_DIR"         -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1151 -DCMAKE_BUILD_TYPE=Release \
-        -DROCM_PATH="$ROCM_PREFIX" -Dhip_DIR="$ROCM_PREFIX/lib/cmake/hip"
-    cmake --build "$BUILD_DIR" -j "${BUILD_JOBS:-$(nproc)}"
-    printf '%s\n' "$ACTUAL_LLAMA_CPP_COMMIT" > "$BUILD_STAMP"
+mkdir -p "$BUILD_DIR"
+EXPECTED_BUILD_FINGERPRINT="$(mktemp "$BUILD_DIR/.muse-build-fingerprint.expected.XXXXXX")"
+trap 'rm -f "$EXPECTED_BUILD_FINGERPRINT"' EXIT
+write_llama_build_fingerprint "$EXPECTED_BUILD_FINGERPRINT" \
+    "$ACTUAL_LLAMA_CPP_COMMIT" "$ROCM_PREFIX" "$rocm_ver" "$AMDGPU_TARGET"
+
+if [ ! -x "$BUILD_DIR/bin/llama-server" ]; then
+    echo "llama.cpp build missing; configuring HIP for $AMDGPU_TARGET"
+    rebuild=1
+elif ! llama_build_fingerprint_matches "$EXPECTED_BUILD_FINGERPRINT" "$BUILD_FINGERPRINT"; then
+    echo "llama.cpp build fingerprint changed; reconfiguring HIP for $AMDGPU_TARGET"
+    rebuild=1
 else
-    echo "llama.cpp build already matches $ACTUAL_LLAMA_CPP_COMMIT"
+    rebuild=0
 fi
+
+if [ "$rebuild" -eq 1 ]; then
+    cmake -S "$LLAMA" -B "$BUILD_DIR" -DGGML_HIP=ON \
+        -DAMDGPU_TARGETS="$AMDGPU_TARGET" -DCMAKE_BUILD_TYPE=Release \
+        -DROCM_PATH="$ROCM_BUILD_PREFIX" \
+        -Dhip_DIR="$ROCM_BUILD_PREFIX/lib/cmake/hip"
+    cmake --build "$BUILD_DIR" -j "${BUILD_JOBS:-$(nproc)}"
+    mv "$EXPECTED_BUILD_FINGERPRINT" "$BUILD_FINGERPRINT"
+else
+    echo "llama.cpp build fingerprint matches; no rebuild needed"
+    rm -f "$EXPECTED_BUILD_FINGERPRINT"
+fi
+trap - EXIT
 
 mkdir -p "$DEST"
 is_recorded_artifact() {

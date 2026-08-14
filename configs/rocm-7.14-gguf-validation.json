@@ -12,7 +12,7 @@
       "study2/dynamic/baseline/np16",
       "study2/dynamic/dflash/np16"
     ],
-    "vllm_bf16_status": "evaluated-not-pursued"
+    "vllm_bf16_status": "pending"
   },
   "platform": {
     "hardware": "AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S",
@@ -24,7 +24,7 @@
     "kernel": "6.17.0-1032-oem",
     "rocm_version": "7.14.0",
     "distribution_target": "gfx1151",
-    "distribution_scope": "Official AMD gfx1151 tarball; AMD release notes do not list this exact Ryzen AI MAX+ PRO 395 SKU",
+    "distribution_scope": "Official AMD gfx1151 tarball; AMD ROCm 7.14 release notes list AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S as gfx1151; Muse-Glimmer workload validation is independent project evidence",
     "archive": {
       "url": "https://repo.amd.com/rocm/tarball-multi-arch/therock-dist-linux-gfx1151-7.14.0.tar.gz",
       "size_bytes": 1713449440,
