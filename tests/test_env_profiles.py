@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = ROOT / "scripts/00-check-env.sh"
+SYSTEM_BASH = shutil.which("bash")
+
+# The README-declared host tools the gguf profile must verify (F-12), matching
+# the required-commands loop in scripts/gguf-quickstart.sh.
+GGUF_HOST_TOOLS = ("git", "cmake", "curl", "python3")
 
 
 def make_rocm(prefix: Path, version: str, pool_gib: int) -> None:
@@ -32,7 +39,7 @@ def make_rocm(prefix: Path, version: str, pool_gib: int) -> None:
 
 
 def make_tools(directory: Path, *, uv_exit: int) -> Path:
-    directory.mkdir()
+    directory.mkdir(exist_ok=True)
     uname = directory / "uname"
     uname.write_text(
         "#!/usr/bin/env bash\nprintf '%s\\n' 6.17.0-1032-oem\n", encoding="utf-8"
@@ -56,6 +63,7 @@ def run_checker(
     version: str = "7.14.0",
     pool_gib: int = 80,
     uv_exit: int = 97,
+    path: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     prefix = tmp_path / "rocm"
     make_rocm(prefix, version, pool_gib)
@@ -64,11 +72,26 @@ def run_checker(
     env["HOME"] = str(tmp_path / "home")
     env["ROCM_PREFIX"] = str(prefix)
     env.pop("ROCM_PATH", None)
-    env["PATH"] = f"{tools}:{env['PATH']}"
-    args = ["bash", str(CHECKER)]
+    env["PATH"] = path if path is not None else f"{tools}:{env['PATH']}"
+    args = [SYSTEM_BASH, str(CHECKER)]
     if profile is not None:
         args.extend(("--profile", profile))
     return subprocess.run(args, cwd=ROOT, env=env, capture_output=True, text=True)
+
+
+def closed_tools(tmp_path: Path, tools_dir: Path, *keep: str) -> Path:
+    """A bin dir that IS the whole PATH: only the named tools resolve.
+
+    Mirrors the installer-cluster F-12 tests: a closed PATH reproduces a host
+    missing a tool without the real system PATH leaking it back in. `uname` is
+    the fake from make_tools so the kernel floor stays host-independent.
+    """
+    bindir = tmp_path / "closedbin"
+    bindir.mkdir()
+    (bindir / "uname").symlink_to(tools_dir / "uname")
+    for tool in keep:
+        (bindir / tool).symlink_to(shutil.which(tool))
+    return bindir
 
 
 def test_default_profile_is_gguf_and_does_not_invoke_uv(tmp_path: Path) -> None:
@@ -154,3 +177,77 @@ def test_invalid_profile_exits_two(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert "invalid profile: invalid" in result.stderr
     assert "--profile gguf|vllm|reference" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# F-12: the gguf profile must verify the README-declared host tools
+# ---------------------------------------------------------------------------
+
+
+def test_gguf_profile_itemizes_host_tools_before_the_verdict(tmp_path: Path) -> None:
+    result = run_checker(tmp_path, profile="gguf")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for tool in GGUF_HOST_TOOLS:
+        match = re.search(rf"^  tool {re.escape(tool)}: (\S+)$", result.stdout, re.M)
+        assert match, f"missing per-tool pass line for {tool}"
+        assert match.group(1).startswith("/"), (
+            f"the {tool} pass line must show the resolved path, got {match.group(1)!r}"
+        )
+    verdict_at = result.stdout.index("OK: gguf environment ready")
+    for tool in GGUF_HOST_TOOLS:
+        assert result.stdout.index(f"tool {tool}: ") < verdict_at, (
+            f"the {tool} pass line must feed the verdict, not trail it"
+        )
+
+
+def test_gguf_profile_missing_cmake_fails_with_per_distro_hints(
+    tmp_path: Path,
+) -> None:
+    tools = make_tools(tmp_path / "tools", uv_exit=97)
+    # cmake is the one README-declared tool left out of the closed PATH.
+    bindir = closed_tools(
+        tmp_path, tools, "bash", "dirname", "python3", "git", "curl", "awk", "grep"
+    )
+
+    result = run_checker(tmp_path, profile="gguf", path=str(bindir))
+
+    assert result.returncode == 1
+    assert "FAIL: required command not found: cmake" in result.stderr
+    for hint in (
+        "sudo apt-get install cmake",
+        "sudo dnf install cmake",
+        "sudo pacman -S cmake",
+    ):
+        assert hint in result.stderr, f"must carry the per-distro install hint ({hint})"
+    assert "cmake: command not found" not in result.stderr
+    assert "OK: gguf environment ready" not in result.stdout
+
+
+def test_missing_python3_fails_fast_with_install_hints(tmp_path: Path) -> None:
+    tools = make_tools(tmp_path / "tools", uv_exit=97)
+    bindir = closed_tools(tmp_path, tools, "bash", "dirname")  # python3 absent
+
+    result = run_checker(tmp_path, path=str(bindir))
+
+    assert result.returncode == 1
+    assert "FAIL: required command not found: python3" in result.stderr
+    for hint in (
+        "sudo apt-get install python3",
+        "sudo dnf install python3",
+        "sudo pacman -S python3",
+    ):
+        assert hint in result.stderr
+    assert "python3: command not found" not in result.stderr, (
+        "the guard must fire instead of a raw bash 'command not found' error"
+    )
+    assert result.stdout == "", "the guard must fire before any diagnostic output"
+
+
+def test_python3_guard_precedes_first_manifest_read() -> None:
+    src = CHECKER.read_text(encoding="utf-8")
+    guard_at = src.index("command -v python3")
+    first_manifest_read = src.index("read_manifest host.minimum_kernel")
+    assert guard_at < first_manifest_read, (
+        "the python3 guard must run before read_manifest shells out to python3"
+    )

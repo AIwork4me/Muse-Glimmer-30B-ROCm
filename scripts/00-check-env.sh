@@ -7,6 +7,15 @@ fail() {
     exit 1
 }
 warn() { echo "WARNING: $1" >&2; }
+# F-12: wording kept in lockstep with the tool guard in install-rocm-7.14.sh.
+missing_tool_fail() {
+    echo "FAIL: required command not found: $1" >&2
+    echo "  Debian/Ubuntu:  sudo apt-get install $1" >&2
+    echo "  Fedora/RHEL:    sudo dnf install $1" >&2
+    echo "  Arch:           sudo pacman -S $1" >&2
+    echo "    see docs/troubleshooting.md" >&2
+    exit 1
+}
 usage() {
     cat <<'EOF'
 Usage: bash scripts/00-check-env.sh [--profile gguf|vllm|reference]
@@ -47,6 +56,10 @@ case "$PROFILE" in
 esac
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# F-12: the manifest reads below shell out to python3 before any diagnostic
+# has printed; guard the interpreter first so a host without it gets an
+# actionable FAIL instead of a raw bash "command not found".
+command -v python3 >/dev/null 2>&1 || missing_tool_fail python3
 # shellcheck source=scripts/lib/version.sh
 source "$ROOT/scripts/lib/version.sh"
 # shellcheck source=scripts/lib/rocm.sh
@@ -93,6 +106,20 @@ case "$PROFILE" in
     vllm) echo "  path: optional advanced vLLM + BF16" ;;
     reference) echo "  path: exact historical vLLM/BF16 reference" ;;
 esac
+
+if [ "$PROFILE" = "gguf" ]; then
+    # F-12: verify the README-declared host tools so an OK verdict means the
+    # next step (scripts/gguf-quickstart.sh) will not die on a missing
+    # command. Same list as its required-commands loop.
+    echo "host tools:"
+    for tool in git cmake curl python3; do
+        if command -v "$tool" >/dev/null 2>&1; then
+            echo "  tool $tool: $(command -v "$tool")"
+        else
+            missing_tool_fail "$tool"
+        fi
+    done
+fi
 
 resolve_rocm_prefix || exit 1
 export PATH="$ROCM_PREFIX/bin:$PATH"
