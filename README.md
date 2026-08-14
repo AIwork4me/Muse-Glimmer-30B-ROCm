@@ -99,6 +99,11 @@ W7900 runs ~3.2–3.4× the gfx1151 APU at `c=1` and up to ~6.8× at `c=16`
 (dedicated GDDR6 vs unified LPDDR5X); peak VRAM ≤ 24.9 GiB of 48. Full detail +
 reproduction: [W7900 results](docs/results/w7900-gfx1100.md), [`scripts/w7900-repro/`](scripts/w7900-repro/).
 
+**Recommended W7900 serving presets** — high throughput: `-np 16 -c 1048576`
+(16 slots × 64K, DFlash off); long context (full 128K, single request):
+`-np 1 -c 131072` + DFlash on, or `-np 2 -c 262144` for two 128K streams. See
+[recommended configurations](docs/results/w7900-gfx1100.md#recommended-serving-configurations-w7900).
+
 ### Study 3 — original multimodal validation
 
 Five vision cells loaded the fixed test image through
