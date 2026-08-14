@@ -8,7 +8,8 @@
 # Idempotent: if ~/rocm-7.14.0/bin/hipcc already exists, this is a no-op.
 # Usage: bash scripts/install-rocm-7.14.sh [ROCM714_PREFIX]
 #   ROCM714_PREFIX=/path    override the install prefix
-#   ROCM714_ARCHIVE=/path   override the download location
+#   ROCM714_ARCHIVE=/path   override the archive location (a pre-placed
+#                           archive with the manifest size is used and kept)
 #   ROCM714_MANIFEST=/path  override the manifest (test seam for the harness)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -115,10 +116,24 @@ else
         "Free space on that filesystem, or set ROCM714_PREFIX to a path on a larger filesystem, then rerun."
 fi
 
-echo "Downloading ROCm $ROCM_VER gfx1151 tarball (~$((SIZE/1024/1024)) MiB) ..."
-echo "  $URL"
-curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 \
-    --output "$ARCHIVE" "$URL"
+# Final-review follow-up (F-02 semantics): ROCM714_ARCHIVE may be pre-placed
+# by the user (offline host, shared cache). A pre-placed archive whose size
+# matches the manifest is used as-is - the size+SHA256 verification below
+# still gates it - and is never deleted after success; only archives this
+# script downloads are transient. A pre-placed archive of any other size is
+# re-downloaded over. (The disk preflight above deliberately still reserves
+# the archive floor: it is a conservative one-time check, not a warm-rerun
+# gate.)
+DOWNLOADED=0
+if [ -f "$ARCHIVE" ] && [ "$(stat -c %s "$ARCHIVE")" -eq "$SIZE" ]; then
+    echo "Using pre-placed archive $ARCHIVE (size matches the manifest; verifying next)."
+else
+    echo "Downloading ROCm $ROCM_VER gfx1151 tarball (~$((SIZE/1024/1024)) MiB) ..."
+    echo "  $URL"
+    curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 \
+        --output "$ARCHIVE" "$URL"
+    DOWNLOADED=1
+fi
 
 echo "Verifying size + SHA256 against $MANIFEST ..."
 # F-15: each verification failure states expected vs got and the next action;
@@ -147,12 +162,17 @@ fi
 mv "$STAGE" "$PREFIX"
 trap - EXIT
 
-# F-02: the verified tarball is a transient download, not a cache - on the
+# F-02: the downloaded tarball is a transient download, not a cache - on the
 # default /tmp (often tmpfs on UMA hosts) leaving it behind silently pins
 # ~1.6 GiB of RAM-backed storage. Remove it once verification and extraction
-# succeeded; failure paths above keep it for inspection/retry.
-rm -f -- "$ARCHIVE"
-echo "Cleaned up archive $ARCHIVE (deleted after successful verification)."
+# succeeded; failure paths above keep it for inspection/retry. A pre-placed
+# archive was never this run's to delete.
+if [ "$DOWNLOADED" -eq 1 ]; then
+    rm -f -- "$ARCHIVE"
+    echo "Cleaned up archive $ARCHIVE (deleted after successful verification)."
+else
+    echo "Kept pre-placed archive $ARCHIVE."
+fi
 
 echo "Installed ROCm $ROCM_VER at $PREFIX. Activate in a shell with:"
 echo "  export PATH=\"$PREFIX/bin:\$PATH\""

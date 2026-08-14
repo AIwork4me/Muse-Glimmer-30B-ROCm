@@ -359,6 +359,94 @@ def test_failed_verification_keeps_the_archive_for_inspection(
 
 
 # ---------------------------------------------------------------------------
+# ROCM714_ARCHIVE pre-placed semantics (final-review Minor-5)
+# ---------------------------------------------------------------------------
+
+
+def install_poison_curl(bindir: Path) -> None:
+    """A curl that satisfies the top tool guard but fails loudly if invoked."""
+    curl = bindir / "curl"
+    curl.write_text(
+        "#!/bin/sh\necho 'POISON-CURL-INVOKED' >&2\nexit 23\n", encoding="utf-8"
+    )
+    curl.chmod(0o755)
+
+
+def test_preplaced_size_matching_archive_is_verified_used_and_kept(
+    tmp_path: Path,
+) -> None:
+    """A user-pre-placed ROCM714_ARCHIVE with the manifest-expected size must
+    not be re-downloaded, and must survive a successful install: it belongs
+    to the user, not to this run."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    install_fake_df(bindir)
+    tarball = make_tarball(tmp_path)
+    manifest = write_manifest(tmp_path, tarball)
+    archive = tmp_path / "archive.tar.gz"
+    shutil.copyfile(tarball, archive)  # pre-placed, size matches the manifest
+    install_poison_curl(bindir)
+    prefix = tmp_path / "rocm"
+
+    result = run_installer(
+        tmp_path, manifest=manifest, prefix=prefix, archive=archive
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (prefix / "bin/hipcc").exists()
+    assert "POISON-CURL-INVOKED" not in result.stderr, "must not re-download"
+    assert "Downloading" not in result.stdout, "must not start a download"
+    assert "pre-placed" in result.stdout.lower(), "must say the archive is reused"
+    assert archive.exists(), "a pre-placed archive must be kept after success"
+    assert "kept" in result.stdout.lower()
+
+
+def test_preplaced_wrong_size_archive_is_redownloaded_and_cleaned_up(
+    tmp_path: Path,
+) -> None:
+    """A stale/wrong-size pre-placed archive is not trusted by its size; the
+    script re-downloads over it, and a downloaded archive is transient (F-02)."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    install_fake_df(bindir)
+    tarball = make_tarball(tmp_path)
+    install_fake_curl(bindir, tarball)
+    manifest = write_manifest(tmp_path, tarball)
+    archive = tmp_path / "archive.tar.gz"
+    archive.write_text("stale pre-placed bytes with the wrong size\n", encoding="utf-8")
+
+    result = run_installer(tmp_path, manifest=manifest, archive=archive)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Downloading" in result.stdout
+    assert "Cleaned up archive" in result.stdout
+    assert not archive.exists(), "a downloaded archive is deleted after success"
+
+
+def test_preplaced_archive_is_still_sha_verified(tmp_path: Path) -> None:
+    """Size match only skips the download; the SHA256 gate still runs and a
+    mismatch keeps the archive for inspection with expected/got hashes."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    install_fake_df(bindir)
+    tarball = make_tarball(tmp_path)
+    expected_sha = "0" * 64
+    manifest = write_manifest(tmp_path, tarball, sha256=expected_sha)
+    archive = tmp_path / "archive.tar.gz"
+    shutil.copyfile(tarball, archive)
+    install_poison_curl(bindir)
+
+    result = run_installer(tmp_path, manifest=manifest, archive=archive)
+
+    assert result.returncode == 1
+    assert "POISON-CURL-INVOKED" not in result.stderr, "size match skips download"
+    assert expected_sha in result.stderr
+    actual_sha = hashlib.sha256(tarball.read_bytes()).hexdigest()
+    assert actual_sha in result.stderr
+    assert archive.exists(), "the failed verification keeps the file for inspection"
+
+
+# ---------------------------------------------------------------------------
 # F-03: an upfront disk-space preflight instead of a mid-install ENOSPC
 # ---------------------------------------------------------------------------
 
