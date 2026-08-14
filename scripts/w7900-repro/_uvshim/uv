@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Minimal `uv` shim for the container: the repo harness invokes
+#   uv run --no-sync python scripts/<x>.py ...
+# but the ACR image has no uv. Translate that to a plain python3 call so the
+# committed harness runs UNMODIFIED. Only the `run ... python` form is used by
+# gguf-bench-cell.sh / run-gguf-matrix.sh.
+set -u
+if [ "${1:-}" = "run" ]; then
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-sync|--frozen|--offline|--locked) shift ;;
+      --project|--directory) shift 2 ;;
+      python|python3) shift; break ;;
+      *) break ;;
+    esac
+  done
+  exec python3 "$@"
+fi
+# `uv pip ...` or anything else -> best-effort passthrough to python3's pip/module.
+if [ "${1:-}" = "pip" ]; then shift; exec python3 -m pip "$@"; fi
+exec python3 "$@"

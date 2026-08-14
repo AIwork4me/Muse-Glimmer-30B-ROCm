@@ -30,3 +30,14 @@ Rules:
 3. Record the actual ROCm version in every new cell.
 4. Keep failed or unstable cells with evidence rather than silently omitting them.
 5. Publish conclusions only after the completion and review gates are satisfied.
+
+## W7900 (gfx1100) throughput validation
+
+Study 2 (throughput under load) reproduced on a single **Radeon PRO W7900**
+(`gfx1100` / RDNA3, 48 GiB) — a distinct platform that neither replaces nor
+relabels the gfx1151 records above.
+
+- Results & interpretation: [w7900-gfx1100.md](w7900-gfx1100.md)
+- Reproduction (two methods — Docker image or bare metal): [`../../scripts/w7900-repro/`](../../scripts/w7900-repro/)
+
+Baseline at `c` (= `-np`) `1 / 4 / 16 / 32` plus DFlash at `c = 1 / 4`.

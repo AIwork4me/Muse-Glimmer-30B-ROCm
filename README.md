@@ -149,7 +149,7 @@ checked against the committed manifest.
 | Status | Platform | Evidence |
 |---|---|---|
 | ✅ **Validated** | Ryzen AI MAX+ PRO 395 / Radeon 8060S, `gfx1151` | Full recorded reference in this repository |
-| 🚧 **Planned** | Radeon W7900, `gfx1100` | No project evidence yet |
+| ✅ **Validated** | Radeon W7900, `gfx1100` | Study 2 throughput — [docs/results/w7900-gfx1100.md](docs/results/w7900-gfx1100.md) |
 | 🚧 **Planned** | Other RDNA3 Radeon | Requires a comparable community submission |
 | 🚧 **Planned** | RDNA4 Radeon | Requires a comparable community submission |
 | 📘 **Upstream recipe** | MI300X / MI355X, CDNA | vLLM recipes PR #776; not revalidated here |
@@ -168,7 +168,8 @@ required manifest, command, logs and results. See
 | `-md dflash.gguf` without `--spec-type draft-dflash` | Silent no-op; do not use |
 | DFlash + `-np 16` | Pathological; one cell aborted after 5 h 16 m |
 | AITER or FP8 vLLM paths on `gfx1151` | Not supported by this validated stack |
-| Radeon W7900 / other dGPUs | Pending evidence |
+| llama.cpp HIP + 17GB/dynamic K-quant on `gfx1100` (W7900) | Validated (Study 2 throughput; DFlash helps at c≤4) |
+| Other RDNA3 / RDNA4 dGPUs | Pending evidence |
 
 **Negative results are results.** The project preserves the silent-DFlash
 discovery, non-completing c=16 cells, backend failures and measurement
