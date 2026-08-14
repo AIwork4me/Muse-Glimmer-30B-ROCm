@@ -62,11 +62,11 @@ the visible answer arrives after ~50–70 hidden reasoning tokens):
 {"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"OK","reasoning_content":"..."}}],"usage":{"completion_tokens":62,"prompt_tokens":61}}
 ```
 
-> **Muse-Glimmer is reasoning-first:** it writes ~50–70 tokens of hidden
-> chain-of-thought (`reasoning_content`) before any visible `content`, so a
-> small `max_tokens` (e.g. 16) spends the whole budget on reasoning and returns
-> empty `content` with `finish_reason:"length"` — HTTP 200, no error. Use
-> `max_tokens` ≥ 512 or omit it
+> **Muse-Glimmer is reasoning-first:** it writes at least ~50–70 tokens of
+> hidden chain-of-thought (`reasoning_content`) before any visible `content`,
+> so a small `max_tokens` (e.g. 16) spends the whole budget on reasoning and
+> returns empty `content` with `finish_reason:"length"` — HTTP 200, no error.
+> Use `max_tokens` ≥ 512 or omit it
 > ([details](docs/troubleshooting.md#reasoning-length)).
 
 Prefer a confirmed one-command entry point? The optional wrapper prints the
@@ -315,8 +315,9 @@ See [ROCm 7.14 scoped validation](docs/results/rocm-7.14/README.md) and its
   before downloading and deletes the verified archive once it succeeds.
 - Default GGUF path: git, cmake, curl, Python 3, and a gfx1151-capable HIP
   toolchain. PyTorch and uv are not required. If one of the four host tools is
-  missing, the scripts stop with `required command not found` and print these
-  same one-liners:
+  missing, the scripts stop with `required command not found`; the installer
+  and environment checker print the matching per-distro install command for
+  the missing tool. Install all four up front:
 
   ```bash
   sudo apt-get install git cmake curl python3   # Debian/Ubuntu

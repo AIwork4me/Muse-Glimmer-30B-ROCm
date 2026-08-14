@@ -225,8 +225,10 @@ manifest, the checker itemizes all four (so its OK verdict means the
 quickstart will not die on a missing command), and the quickstart checks all
 four after resolving the ROCm toolchain.
 
-**Fix:** install the missing tool for your distro — the same one-liners the
-failure text prints:
+**Fix:** install the missing tool for your distro — the installer and
+environment checker print the matching per-distro command for the tool they
+flagged (the quickstart stops with the bare error line above). To install all
+four up front:
 
 ```bash
 sudo apt-get install git cmake curl python3   # Debian/Ubuntu

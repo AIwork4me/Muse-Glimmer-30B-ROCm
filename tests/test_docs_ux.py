@@ -8,8 +8,10 @@ the docs promise behavior the scripts rely on, so pin the promise.
 F-06/F-07/F-08 - the Quick start must carry the user past a bare server URL:
 second-terminal guidance, a verified health + completion request pair, and the
 reasoning-first `max_tokens` warning that keeps a first completion non-empty.
-F-13 - per-distro host-tool one-liners must exist in README and match the
-wording the scripts print on ``required command not found``.
+F-13 - per-distro host-tool one-liners must exist in README, which must also
+describe what the scripts actually print on ``required command not found``
+(the installer and checker name the single missing tool; the quickstart
+prints no install hint).
 F-17/F-10 - ``MODEL_DEST`` and the optional-asset sizes must be documented
 next to the other env knobs / download sizes.
 Fold-ins - the dirty-checkout entry's mid-switch recovery, the corrected
@@ -68,6 +70,11 @@ def test_requirements_have_per_distro_tool_install_one_liners() -> None:
     assert "sudo apt-get install git cmake curl python3" in requirements
     assert "sudo dnf install git cmake curl python3" in requirements
     assert "sudo pacman -S git cmake curl python3" in requirements
+    # F-13 review follow-up: only the installer and checker print a hint, and
+    # it names the single missing tool — the quickstart prints none. The docs
+    # must describe that, not claim the failure text prints these blocks.
+    assert "per-distro install command" in requirements
+    assert "same one-liners" not in requirements
 
 
 def test_troubleshooting_has_missing_tool_entry() -> None:
@@ -121,4 +128,6 @@ def test_hardware_validation_has_bios_uma_sizing_pointer() -> None:
     assert "80 GiB" in doc
     assert "00-check-env.sh" in doc
     assert "README.md#requirements-and-operating-notes" in doc
-    assert "warning envelope" in doc
+    # Matches the checker's verbatim term (00-check-env.sh prints
+    # "validated envelope 80 GiB GPU-visible — warning boundary, not a minimum").
+    assert "warning boundary, not a minimum" in doc
