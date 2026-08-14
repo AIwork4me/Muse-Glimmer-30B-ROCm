@@ -22,6 +22,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/install-rocm-7.14.sh"
+SYSTEM_BASH = shutil.which("bash")
 
 HIPCC_FIRST_LINE = "HIP version: stub-7.14.0-test"
 HIPCC_EXTRA_LINES = [f"STUB-HIPCC-EXTRA-{n}" for n in range(2, 6)]
@@ -171,7 +172,7 @@ def run_installer(
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
-        ["bash", str(SCRIPT)],
+        [SYSTEM_BASH, str(SCRIPT)],
         cwd=ROOT,
         env=env,
         text=True,
@@ -374,3 +375,61 @@ def test_insufficient_prefix_space_refuses_before_downloading(
     assert "ROCM714_PREFIX" in result.stderr, "must offer the prefix escape hatch"
     assert "Downloading" not in result.stdout
     assert not archive.exists()
+
+
+# ---------------------------------------------------------------------------
+# F-12: python3 and curl must be guarded before first use
+# ---------------------------------------------------------------------------
+
+
+def closed_bin(tmp_path: Path, *keep: str) -> Path:
+    """A bin dir that IS the whole PATH: only the named tools resolve.
+
+    The tool guard runs before anything else the script calls, so a closed
+    PATH of {dirname[, python3]} reproduces a host missing python3 or curl
+    without the real system PATH leaking the tool back in.
+    """
+    bindir = tmp_path / "closedbin"
+    bindir.mkdir()
+    for tool in keep:
+        (bindir / tool).symlink_to(shutil.which(tool))
+    return bindir
+
+
+def assert_missing_tool_is_actionable(result, tool: str) -> None:
+    assert result.returncode == 1
+    assert f"required command not found: {tool}" in result.stderr
+    for hint in ("apt-get install", "dnf install", "pacman -S"):
+        assert hint in result.stderr, f"must carry a per-distro install hint ({hint})"
+    assert f"{tool}: command not found" not in result.stderr, (
+        "the guard must fire instead of a raw bash 'command not found' error"
+    )
+
+
+def test_missing_python3_fails_fast_with_install_hints(tmp_path: Path) -> None:
+    tarball = make_tarball(tmp_path)
+    manifest = write_manifest(tmp_path, tarball)
+    bindir = closed_bin(tmp_path, "dirname")  # python3 absent
+
+    result = run_installer(tmp_path, manifest=manifest, path=str(bindir))
+
+    assert_missing_tool_is_actionable(result, "python3")
+
+
+def test_missing_curl_fails_fast_with_install_hints(tmp_path: Path) -> None:
+    tarball = make_tarball(tmp_path)
+    manifest = write_manifest(tmp_path, tarball)
+    bindir = closed_bin(tmp_path, "dirname", "python3")  # curl absent
+
+    result = run_installer(tmp_path, manifest=manifest, path=str(bindir))
+
+    assert_missing_tool_is_actionable(result, "curl")
+
+
+def test_tool_guard_precedes_first_manifest_read() -> None:
+    src = SCRIPT.read_text(encoding="utf-8")
+    guard_at = src.index("command -v")
+    first_read_at = src.index('URL="$(read_field')
+    assert guard_at < first_read_at, (
+        "the python3/curl guard must run before the manifest is read"
+    )

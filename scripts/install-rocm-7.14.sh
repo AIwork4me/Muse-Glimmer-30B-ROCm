@@ -14,6 +14,19 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 MANIFEST="${ROCM714_MANIFEST:-$HERE/configs/rocm-7.14-gguf-validation.json}"
 
+# F-12: the manifest reader (python3) and the downloader (curl) must exist
+# before first use; without this check a bare OS dies inside read_field with a
+# raw bash "command not found" instead of an actionable error.
+for REQUIRED_TOOL in python3 curl; do
+    if ! command -v "$REQUIRED_TOOL" >/dev/null 2>&1; then
+        echo "ERROR: required command not found: $REQUIRED_TOOL" >&2
+        echo "  Debian/Ubuntu:  sudo apt-get install $REQUIRED_TOOL" >&2
+        echo "  Fedora/RHEL:    sudo dnf install $REQUIRED_TOOL" >&2
+        echo "  Arch:           sudo pacman -S $REQUIRED_TOOL" >&2
+        exit 1
+    fi
+done
+
 read_field() {
     python3 - "$MANIFEST" "$1" <<'PY'
 import json, sys
