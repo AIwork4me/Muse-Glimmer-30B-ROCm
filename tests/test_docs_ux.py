@@ -10,6 +10,8 @@ second-terminal guidance, a verified health + completion request pair, and the
 reasoning-first `max_tokens` warning that keeps a first completion non-empty.
 F-13 - per-distro host-tool one-liners must exist in README and match the
 wording the scripts print on ``required command not found``.
+F-17/F-10 - ``MODEL_DEST`` and the optional-asset sizes must be documented
+next to the other env knobs / download sizes.
 """
 from pathlib import Path
 
@@ -72,3 +74,23 @@ def test_troubleshooting_has_missing_tool_entry() -> None:
     # Discoverable from the checker/installer wording (they print
     # "required command not found: <tool>" and point at this file bare).
     assert "required command not found" in doc
+
+
+def test_model_dest_is_documented_with_the_other_env_knobs() -> None:
+    readme = _src("README.md")
+    contract = readme.split("## Reproducibility contract", 1)[1].split(
+        "## Hardware validation matrix", 1
+    )[0]
+    assert "MODEL_DEST=" in contract
+    assert "bash scripts/gguf-quickstart.sh" in contract
+    # F-17's point: the 15.6 GiB model is reusable across clones.
+    assert "across clones" in contract
+
+
+def test_optional_features_size_their_extra_downloads() -> None:
+    readme = _src("README.md")
+    # Manifest-exact sizes (1.52 GiB drafter / 1.30 GiB mmproj).
+    assert "1.5 GiB" in readme
+    assert "1.3 GiB" in readme
+    assert "WITH_DFLASH=1" in readme
+    assert "WITH_MMPROJ=1" in readme

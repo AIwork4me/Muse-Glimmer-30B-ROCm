@@ -90,7 +90,9 @@ llama.cpp commit, verifies the model's exact size and SHA256, builds HIP for
 `curl`, Python 3, and the selected HIP toolchain; it does **not** require
 PyTorch, `uv`, or the vLLM environment.
 
-Optional features use the same path:
+Optional features use the same path, each adding one manifest-verified
+download on first use: `mmproj-kquant.gguf` (~1.3 GiB) for image input, the
+`dflash-kquant.gguf` drafter (~1.5 GiB) for speculative decoding.
 
 ```bash
 WITH_MMPROJ=1 bash scripts/gguf-quickstart.sh  # image input
@@ -216,6 +218,10 @@ reported as **latest/experimental**:
 ```bash
 # Optional regional mirror; the official endpoint remains the default.
 HF_ENDPOINT=https://hf-mirror.com bash scripts/02-fetch-model.sh
+
+# Store the ~15.6 GiB model outside the clone; the same hash-verified file
+# is then reused across clones instead of re-downloaded per clone.
+MODEL_DEST=/shared/models bash scripts/gguf-quickstart.sh
 
 # Deliberately follow newer upstream state; benchmark claims no longer apply.
 MODEL_REVISION=main bash scripts/02-fetch-model.sh
