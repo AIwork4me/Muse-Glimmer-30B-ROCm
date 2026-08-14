@@ -44,6 +44,7 @@ BUILD_ALLOWANCE_BYTES = 512 * 1024 * 1024 * 3
 
 GGUF_FILE = "muse-glimmer-30B-kquant-17gb.gguf"
 DFLASH_FILE = "dflash-kquant.gguf"
+MMPROJ_FILE = "mmproj-kquant.gguf"
 
 
 def gguf_sizes() -> dict[str, int]:
@@ -56,6 +57,11 @@ def gguf_sizes() -> dict[str, int]:
 def gib(bytes_: int) -> str:
     """Render bytes the way the script's awk 'printf %.1f' does."""
     return f"{bytes_ / GIB:.1f} GiB"
+
+
+def gib2(bytes_: int) -> str:
+    """Render bytes the way the plan header's 'printf %.2f' does."""
+    return f"{bytes_ / GIB:.2f} GiB"
 
 
 @contextlib.contextmanager
@@ -190,6 +196,7 @@ def skeleton_env(
     df_arms: list[tuple[str, str, int]] | None = None,
     df_default: tuple[str, int] = ("/fakedisk", 2 * KB_GIB),
     with_artifacts: bool = False,
+    extra_artifacts: tuple[str, ...] = (),
     origin: Path | None = None,
     pin: str | None = None,
     extra: dict[str, str] | None = None,
@@ -215,6 +222,8 @@ def skeleton_env(
     build.mkdir(exist_ok=True)
     if with_artifacts:
         (models / GGUF_FILE).write_bytes(b"0" * 1024)
+    for name in extra_artifacts:
+        (models / name).write_bytes(b"0" * 1024)
 
     if origin is not None:
         patch_validated_stack(repo, repo_url=f"file://{origin}", commit=str(pin))
@@ -463,3 +472,97 @@ def test_reuse_log_never_claims_no_fetch_right_after_a_fetch() -> None:
         "this line prints right after the script's own fetch on a fresh clone;"
         " word it to reflect actual state instead"
     )
+
+
+# ---------------------------------------------------------------------------
+# F-10: WITH_DFLASH / WITH_MMPROJ acknowledged in the plan header and spec args
+# ---------------------------------------------------------------------------
+
+
+def test_dflash_and_mmproj_plan_header_acknowledges_present_artifacts(
+    tmp_path: Path,
+) -> None:
+    origin, pin = make_origin(tmp_path)
+    repo = make_skeleton(tmp_path)
+    env, models, _build = skeleton_env(
+        tmp_path,
+        repo,
+        with_artifacts=True,
+        extra_artifacts=(DFLASH_FILE, MMPROJ_FILE),
+        origin=origin,
+        pin=pin,
+        df_default=("/fakedisk", 200 * KB_GIB),
+        extra={"WITH_DFLASH": "1", "WITH_MMPROJ": "1"},
+    )
+
+    result = run_script(repo / "scripts/gguf-quickstart.sh", env=env, cwd=repo)
+
+    assert result.returncode == 127, result.stdout + result.stderr
+    assert f"Serving on http://127.0.0.1:{env['PORT']}" in result.stdout
+    assert (
+        f"dflash drafter  : {DFLASH_FILE} (already present; will be verified)"
+        in result.stdout
+    ), "F-10: the flag must surface in the plan header when the drafter is on disk"
+    assert "spec decoding   : draft-dflash" in result.stdout
+    assert (
+        f"mmproj          : {MMPROJ_FILE} (already present; will be verified)"
+        in result.stdout
+    ), "F-10: WITH_MMPROJ deserves the same one-line acknowledgment"
+    # F-10(b): the effective speculative args on one line just before exec -
+    # --spec-type otherwise appears nowhere the user can see it.
+    assert (
+        f"speculative decoding: draft-dflash "
+        f"(draft: {models}/{DFLASH_FILE}, n-max 15)" in result.stdout
+    ), "the server never echoes its argv; the script must state the spec args"
+
+
+def test_dflash_and_mmproj_plan_header_sizes_the_pending_download(
+    tmp_path: Path,
+) -> None:
+    """Absent artifacts: the plan header must announce the download cost.
+
+    The skeleton points at an unreachable local origin, so the run dies in
+    the clone right after printing the plan header - exactly the window
+    under test, with no network."""
+    sizes = gguf_sizes()
+    repo = make_skeleton(tmp_path)
+    env, _models, _build = skeleton_env(
+        tmp_path,
+        repo,
+        df_default=("/fakedisk", 200 * KB_GIB),
+        extra={"WITH_DFLASH": "1", "WITH_MMPROJ": "1"},
+    )
+
+    result = run_script(repo / "scripts/gguf-quickstart.sh", env=env, cwd=repo)
+
+    assert result.returncode != 0
+    assert "llama.cpp build : " in result.stdout, "the plan header must print"
+    assert (
+        f"dflash drafter  : {DFLASH_FILE} ({gib2(sizes[DFLASH_FILE])} to fetch)"
+        in result.stdout
+    ), "F-10: the unannounced ~1.5 GiB drafter cost must be sized up front"
+    assert (
+        f"mmproj          : {MMPROJ_FILE} ({gib2(sizes[MMPROJ_FILE])} to fetch)"
+        in result.stdout
+    )
+
+
+def test_optional_features_stay_silent_without_the_flags(tmp_path: Path) -> None:
+    origin, pin = make_origin(tmp_path)
+    repo = make_skeleton(tmp_path)
+    env, _models, _build = skeleton_env(
+        tmp_path,
+        repo,
+        with_artifacts=True,
+        origin=origin,
+        pin=pin,
+        df_default=("/fakedisk", 200 * KB_GIB),
+    )
+
+    result = run_script(repo / "scripts/gguf-quickstart.sh", env=env, cwd=repo)
+
+    assert result.returncode == 127, result.stdout + result.stderr
+    assert "dflash" not in result.stdout, "no DFlash lines without WITH_DFLASH=1"
+    assert "mmproj" not in result.stdout, "no mmproj lines without WITH_MMPROJ=1"
+    assert "spec decoding" not in result.stdout
+    assert "speculative decoding" not in result.stdout

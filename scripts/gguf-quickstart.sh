@@ -121,6 +121,19 @@ print(sizes.get(sys.argv[2], sizes.get(default, 0)))
 PY
 }
 
+artifact_gib() {  # artifact_gib <filename> -> manifest size rendered as "<N.NN> GiB"
+    awk -v b="$(artifact_size_bytes "$1")" 'BEGIN {printf "%.2f GiB", b / 1073741824}'
+}
+
+artifact_plan_note() {  # artifact_plan_note <filename> -> "(<size> to fetch)" | "(already present; will be verified)"
+    local filename="$1"
+    if [ -f "$DEST/$filename" ]; then
+        printf '(already present; will be verified)'
+    else
+        printf '(%s to fetch)' "$(artifact_gib "$filename")"
+    fi
+}
+
 fs_of_dir() {  # fs_of_dir <dir> -> "<mount> <avail_bytes>" of the filesystem holding <dir>
     local dir="$1"
     # Walk up to the nearest existing ancestor: models/ and the build dir do
@@ -187,6 +200,16 @@ else
     echo "GGUF track      : latest/experimental override"
 fi
 echo "llama.cpp build : $BUILD_DIR"
+# F-10: WITH_MMPROJ / WITH_DFLASH used to be invisible until their fetch
+# lines appeared mid-run; acknowledge each optional feature - and its disk
+# cost - in the plan header.
+if [ "${WITH_MMPROJ:-0}" = "1" ]; then
+    echo "mmproj          : $MMPROJ_FILE $(artifact_plan_note "$MMPROJ_FILE")"
+fi
+if [ "${WITH_DFLASH:-0}" = "1" ]; then
+    echo "dflash drafter  : $DFLASH_FILE $(artifact_plan_note "$DFLASH_FILE")"
+    echo "spec decoding   : draft-dflash (n-max $SPEC_DRAFT_N_MAX)"
+fi
 
 # Clone once, then fetch and detach at the selected ref on every run. Existing
 # uncommitted llama.cpp changes are never deleted; the guard refuses instead.
@@ -321,4 +344,10 @@ if [ "${WITH_DFLASH:-0}" = "1" ]; then
 fi
 
 echo "Serving on http://127.0.0.1:$PORT ..."
+if [ "${WITH_DFLASH:-0}" = "1" ]; then
+    # F-10: --spec-type draft-dflash otherwise appears nowhere the user can
+    # see (the server never echoes its argv); state the effective
+    # speculative arguments on one line.
+    echo "speculative decoding: draft-dflash (draft: $DEST/$DFLASH_FILE, n-max $SPEC_DRAFT_N_MAX)"
+fi
 exec "$BUILD_DIR/bin/llama-server" "${SERVER_ARGS[@]}"     -ngl 999 -c 32768 --port "$PORT" --jinja
