@@ -84,6 +84,10 @@ GGUF_REVISION="${GGUF_REVISION:-$VALIDATED_GGUF_REVISION}"
 GGUF_FILE="${GGUF_FILE:-muse-glimmer-30B-kquant-17gb.gguf}"
 MMPROJ_FILE="mmproj-kquant.gguf"
 DFLASH_FILE="dflash-kquant.gguf"
+# F-18: upstream DFlash drafts at most block_size - 1 = 15 tokens per round
+# and clamps any higher --spec-draft-n-max request down to 15 with a warning
+# line at every server start, so request the effective maximum directly.
+SPEC_DRAFT_N_MAX=15
 DEST="${MODEL_DEST:-models}"
 export HF_ENDPOINT="${HF_ENDPOINT:-https://huggingface.co}"
 
@@ -312,7 +316,7 @@ if [ "${WITH_DFLASH:-0}" = "1" ]; then
     fetch_file "$DFLASH_FILE"
     SERVER_ARGS+=(
         -md "$DEST/$DFLASH_FILE" -ngld 99
-        --spec-type draft-dflash --spec-draft-n-max 16
+        --spec-type draft-dflash --spec-draft-n-max "$SPEC_DRAFT_N_MAX"
     )
 fi
 

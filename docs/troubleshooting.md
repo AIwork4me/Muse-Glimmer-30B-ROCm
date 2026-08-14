@@ -232,20 +232,22 @@ draft acceptance is null/zero). The draft model loaded fine but did nothing.
 loop, so the server runs as a normal single-model server. This is a *silent*
 no-op — no warning is logged.
 
-**Fix:** always pass `--spec-type draft-dflash --spec-draft-n-max 16` alongside
+**Fix:** always pass `--spec-type draft-dflash --spec-draft-n-max 15` alongside
 `-md`. The full DFlash invocation is:
 
 ```
 -m models/<weight>.gguf -ngl 999 ... \
   -md models/dflash-kquant.gguf -ngld 99 \
-  --spec-type draft-dflash --spec-draft-n-max 16
+  --spec-type draft-dflash --spec-draft-n-max 15
 ```
 
-`--spec-draft-n-max 16` is the measured sweet spot (it equals the DFlash
-drafter's block_size). A pre-matrix sweep gave n_max `3 / 8 / 16 / 32` →
-**1.14× / 1.51× / 1.60× / 1.60×** — 16 is the elbow; 32 is flat, so 16 wins on
-memory. With this engaged, the 17gb weight delivers **2.20×** (23.03 vs 10.48
-tok/s) at greedy batch 1. Verification: the cell JSON's `acceptance` block is
+`--spec-draft-n-max 15` is the measured sweet spot. Upstream DFlash drafts at
+most `block_size - 1` = 15 tokens per round and silently clamps any higher
+request down to 15 with a warning line at every server start — so request 15
+directly. A pre-matrix sweep gave n_max `3 / 8 / 16 / 32` →
+**1.14× / 1.51× / 1.60× / 1.60×**; the curve is flat past the elbow (the 16
+and 32 cells effectively ran at 15 via the clamp). With this engaged, the
+17gb weight delivers **2.20×** (23.03 vs 10.48 tok/s) at greedy batch 1. Verification: the cell JSON's `acceptance` block is
 non-null and the rate is ~0.23. If you see 1.0× with null acceptance, you have
 fallen into this trap.
 

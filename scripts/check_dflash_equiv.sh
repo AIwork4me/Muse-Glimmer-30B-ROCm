@@ -99,7 +99,7 @@ PY
 }
 
 run_mode "$TMP_DIR/baseline.json" "$TMP_DIR/baseline.log"
-run_mode "$TMP_DIR/dflash.json" "$TMP_DIR/dflash.log"     -md models/dflash-kquant.gguf -ngld 99     --spec-type draft-dflash --spec-draft-n-max 16
+run_mode "$TMP_DIR/dflash.json" "$TMP_DIR/dflash.log"     -md models/dflash-kquant.gguf -ngld 99     --spec-type draft-dflash --spec-draft-n-max 15
 
 python3 scripts/capture_proc.py draft <"$TMP_DIR/dflash.log" >"$TMP_DIR/acceptance.json"
 python3 - "$TMP_DIR/baseline.json" "$TMP_DIR/dflash.json" "$TMP_DIR/acceptance.json" <<'PY'
