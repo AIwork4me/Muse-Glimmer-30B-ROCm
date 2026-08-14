@@ -87,6 +87,87 @@ DFLASH_FILE="dflash-kquant.gguf"
 DEST="${MODEL_DEST:-models}"
 export HF_ENDPOINT="${HF_ENDPOINT:-https://huggingface.co}"
 
+# F-03: refuse up front instead of dying mid-download (or mid-build) with a
+# raw "No space left on device". Floors come from the artifact manifest the
+# fetch step already verifies against:
+#   - every selected artifact that is not yet present locally contributes its
+#     manifest size_bytes (WITH_DFLASH/WITH_MMPROJ add the drafter/projector).
+#     Artifacts already on disk are skipped: they occupy their space already,
+#     and re-requiring it would lock warm reruns out of serving on any disk
+#     that filled up after the download. If hash verification quarantines one,
+#     the rerun sees it absent and this preflight re-engages, so a refetch can
+#     never start without this check having passed.
+#   - the llama.cpp checkout/build allowance covers the ~206 MiB validated
+#     worktree plus the ~1022 MiB build-714 tree measured on the validated
+#     stack, rounded up to 1.5 GiB for ref/build churn. It always applies:
+#     a fingerprint change can force a rebuild on any run.
+# models/ and the build dir can live on different filesystems, so each is
+# checked against its own floor; when they share a mount the floors are
+# combined and checked once (two separate checks against the same mount
+# would undercount the shared space).
+DISK_BUILD_ALLOWANCE_BYTES=$((512 * 1024 * 1024 * 3))
+
+artifact_size_bytes() {  # artifact_size_bytes <filename> -> manifest size_bytes
+    python3 - "$HERE/configs/artifact-manifest.json" "$1" <<'PY'
+import json, sys
+files = json.load(open(sys.argv[1]))["sets"]["gguf"]["files"]
+sizes = {item["path"]: item["size_bytes"] for item in files}
+default = "muse-glimmer-30B-kquant-17gb.gguf"
+print(sizes.get(sys.argv[2], sizes.get(default, 0)))
+PY
+}
+
+fs_of_dir() {  # fs_of_dir <dir> -> "<mount> <avail_bytes>" of the filesystem holding <dir>
+    local dir="$1"
+    # Walk up to the nearest existing ancestor: models/ and the build dir do
+    # not exist yet this early in the run.
+    while [ ! -d "$dir" ]; do
+        dir="$(dirname "$dir")"
+    done
+    df -Pk "$dir" | awk 'NR==2 {print $NF, $4 * 1024}'
+}
+
+require_disk_bytes() {  # require_disk_bytes <what> <dir> <floor_bytes> <remedy>
+    local what="$1" dir="$2" floor_bytes="$3" remedy="$4" mount avail
+    read -r mount avail <<<"$(fs_of_dir "$dir")"
+    if [ "$avail" -lt "$floor_bytes" ]; then
+        printf 'ERROR: not enough disk space for %s: filesystem %s (holding %s) has %s GiB available, need at least %s GiB.\n' \
+            "$what" "$mount" "$dir" \
+            "$(awk -v b="$avail" 'BEGIN {printf "%.1f", b / 1073741824}')" \
+            "$(awk -v b="$floor_bytes" 'BEGIN {printf "%.1f", b / 1073741824}')" >&2
+        printf '       %s\n' "$remedy" >&2
+        exit 1
+    fi
+}
+
+DISK_MODEL_REMEDY="Free space on that filesystem, or set MODEL_DEST to a path on a larger filesystem, then rerun (MODEL_DEST also reuses the model across clones; see README)."
+selected_artifacts=("$GGUF_FILE")
+if [ "${WITH_MMPROJ:-0}" = "1" ]; then
+    selected_artifacts+=("$MMPROJ_FILE")
+fi
+if [ "${WITH_DFLASH:-0}" = "1" ]; then
+    selected_artifacts+=("$DFLASH_FILE")
+fi
+disk_model_floor_bytes=0
+for artifact in "${selected_artifacts[@]}"; do
+    if [ ! -f "$DEST/$artifact" ]; then
+        artifact_bytes="$(artifact_size_bytes "$artifact")"
+        disk_model_floor_bytes=$((disk_model_floor_bytes + artifact_bytes))
+    fi
+done
+
+if [ "$(fs_of_dir "$DEST" | awk '{print $1}')" = "$(fs_of_dir "$BUILD_DIR" | awk '{print $1}')" ]; then
+    require_disk_bytes "the model download and the llama.cpp checkout/build" \
+        "$DEST" "$((disk_model_floor_bytes + DISK_BUILD_ALLOWANCE_BYTES))" \
+        "$DISK_MODEL_REMEDY"
+else
+    require_disk_bytes "the model download" "$DEST" "$disk_model_floor_bytes" \
+        "$DISK_MODEL_REMEDY"
+    require_disk_bytes "the llama.cpp checkout/build" "$BUILD_DIR" \
+        "$DISK_BUILD_ALLOWANCE_BYTES" \
+        "Free space on that filesystem, then rerun."
+fi
+
 echo "llama.cpp source: $LLAMA_CPP_REPO"
 echo "llama.cpp ref   : $LLAMA_CPP_REF"
 if [ "$LLAMA_CPP_REF" = "$VALIDATED_LLAMA_CPP_REF" ]; then
