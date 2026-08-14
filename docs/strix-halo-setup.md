@@ -1,84 +1,107 @@
-# Strix Halo setup (prerequisites)
+# Strix Halo setup
 
-Target box: **AMD Ryzen AI MAX+ PRO 395** w/ **Radeon 8060S** ("Strix Halo"),
-gfx1151 (RDNA 3.5), **94 GiB unified LPDDR5X**. This guide gets the host to the
-point where `scripts/00-check-env.sh` passes.
+Target validated by this project: **AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S**
+(`gfx1151`, RDNA 3.5) with 94 GiB unified LPDDR5X.
 
-## 1. Kernel ≥ 6.16.9 (required)
+## Default path: llama.cpp + GGUF
 
-Older kernels expose only **~15.5 GB** of the unified pool to ROCm — a KFD/HSA
-UMA-handling bug ([ROCm/ROCm#5444][uma]). Anything ≥ 6.16.9 fixes it. This host
-runs `6.17.0-1020-oem`.
+This path uses ROCm 7.14 directly. It needs a compatible Linux host, `git`,
+`cmake`, `curl`, Python 3, and enough storage for the 1.6 GiB ROCm archive,
+the 15.6 GiB default GGUF, and the llama.cpp build. It does **not** need
+Python 3.12 specifically, `uv`, PyTorch, TheRock wheels, or vLLM.
 
-```bash
-uname -r            # must be >= 6.16.9
-```
+### 1. Check the project host floor
 
-If you are below the floor, upgrade your kernel before going further — no amount
-of ROCm config recovers the missing memory. See
-[troubleshooting.md#uma-bug](troubleshooting.md#uma-bug).
+For this project's validated Strix Halo host, kernel 6.16.9 or newer avoids the
+observed KFD/HSA unified-memory issue that exposed only about 15.5 GiB to ROCm.
 
-## 2. ROCm tracks
-
-The published benchmark is historical evidence from **ROCm 7.2.1**. ROCm
-**7.14.0** is the forward official gfx1151 validation target, kept as a separate
-track so new results cannot overwrite the reference matrix. See
-[`docs/results/README.md`](results/README.md) for the status and evidence
-boundary.
+AMD's [current RDNA3.5 guidance](https://rocm.docs.amd.com/en/latest/reference/system-optimization/rdna3-5.html)
+uses distribution-specific kernel lines. The 6.16.9 value here is the project's
+reproduction floor, not AMD's universal ROCm 7.14 requirement.
 
 ```bash
-cat /opt/rocm/.info/version     # 7.2.x
-rocminfo | grep -i gfx1151      # must list gfx1151
+uname -r
 ```
 
-Want the official path instead? See
-[§Alternative: ROCm 7.14.0](#alternative-rocm-7140) below.
+The environment checker performs a numeric major/minor/patch comparison and
+links to [the UMA troubleshooting entry](troubleshooting.md#uma-bug) if the host
+is below that project floor.
 
-## 3. UMA carve-out / VRAM pool
-
-Strix Halo is unified-memory: the GPU draws from system DRAM. Ensure the BIOS
-memory-iGPU carve-out (often labelled "UMA Frame Buffer Size" or "iGPU memory")
-leaves the bulk of the 94 GiB visible to the runtime. `00-check-env.sh` asserts
-the pool ROCm reports is **≥ 60 GiB**. This is a hard requirement for the
-validated BF16 path, so the check fails below it; the UMA bug is the usual
-cause. The smaller GGUF path may work on lower-memory systems, but that is not
-yet a validated configuration.
-
-## 4. Python 3.12 + uv
-
-The TheRock gfx1151 torch wheels **fail to import on Python 3.13**; pin **3.12**.
-The project is `uv`-managed.
+### 2. Install ROCm 7.14 side-by-side
 
 ```bash
-python3.12 --version          # 3.12.*
-command -v uv || curl -LsSf https://astral.sh/uv/install.sh | sh
+bash scripts/install-rocm-7.14.sh
 ```
 
-## 5. Verify
+The installer is idempotent. It installs the recorded AMD gfx1151 archive at
+`~/rocm-7.14.0`, verifies its exact byte size and SHA256, stages extraction,
+and does not overwrite `/opt/rocm`. Archive identity is recorded in
+[`configs/rocm-7.14-gguf-validation.json`](../configs/rocm-7.14-gguf-validation.json).
+
+### 3. Verify gfx1151 and memory policy
 
 ```bash
-uv sync                       # create .venv, pull TheRock gfx1151 torch
-bash scripts/00-check-env.sh  # asserts ROCm 7.2.x · kernel ≥6.16.9 · gfx1151 · ≥60 GiB pool
-uv run pytest tests/test_env_torch.py tests/test_env.py -v -m gpu
+~/rocm-7.14.0/bin/hipcc --version
+~/rocm-7.14.0/bin/rocminfo | grep -i gfx1151
+bash scripts/00-check-env.sh --profile gguf
 ```
 
-Once that is green, continue with the vLLM build (`scripts/01-build-vllm.sh`).
+The GGUF profile selects the same ROCm prefix as the quickstart. It requires the
+default GGUF weights to fit the GPU-visible pool, but a lower-memory configuration
+that remains large enough for the weights receives a warning rather than a false
+unsupported-hardware failure. Published project evidence remains scoped to the
+recorded 94 GiB Strix Halo configuration.
 
-## Alternative: ROCm 7.14.0
+### 4. Start Muse-Glimmer
 
-If you want AMD's officially-supported ROCm for gfx1151, use **7.14.0** (released
-2026-07-16; first ROCm with official gfx1151 APU support). Note: 7.14.0 ships via
-**TheRock** (the new modular build system) — the legacy `repo.radeon.com/rocm/apt/`
-repo tops out at **7.2.4**, so `apt` will not find 7.13/7.14 there. Install via the
-TheRock release/prefix and re-point the torch wheel pin in `pyproject.toml` to the
-matching line. The adaptation hypotheses (BF16, `TRITON_ATTN`, source-built vLLM, AITER
-off) must be revalidated as a complete stack; do not assume only the wheel pin
-changes. Partial cells may exist, but the ROCm 7.14 track is incomplete and has
-no published conclusion. Follow
-[`docs/results/rocm-7.14/README.md`](results/rocm-7.14/README.md). Caveat:
-official support does not imply every workload is bug-free; open Strix Halo
-unified-memory issues
-([#6370](https://github.com/ROCm/ROCm/issues/6370), [#6165](https://github.com/ROCm/ROCm/issues/6165))
-persist and can affect stability under sustained load.
+```bash
+bash scripts/gguf-quickstart.sh
+# OpenAI-compatible server: http://127.0.0.1:8080
+```
 
-[uma]: https://github.com/ROCm/ROCm/issues/5444
+The first run checks out the pinned llama.cpp commit, builds HIP for `gfx1151`,
+downloads the pinned default GGUF from official Hugging Face, and verifies its
+size and SHA256. Matching source, toolchain, and model assets are reused on later
+runs.
+
+Optional vision and DFlash use the same setup:
+
+```bash
+WITH_MMPROJ=1 bash scripts/gguf-quickstart.sh
+WITH_DFLASH=1 bash scripts/gguf-quickstart.sh
+```
+
+## Optional advanced path: vLLM + BF16
+
+**Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM validation
+pending.** This is a separate, maintainer-oriented path for multi-user serving
+and features such as agentic tool parsing and 128K context. It remains validated
+on the historical ROCm 7.2.1 reference stack.
+
+Only this path requires:
+
+- Python 3.12;
+- `uv` and the locked TheRock gfx1151 PyTorch runtime;
+- the complete ROCm 7.2.1 development toolchain at `/opt/rocm`;
+- at least 60 GiB of GPU-visible unified memory for the validated BF16 envelope;
+- a pinned vLLM source build plus the two committed compatibility patches.
+
+```bash
+uv sync --locked
+ROCM_PREFIX=/opt/rocm bash scripts/00-check-env.sh --profile vllm
+bash scripts/01-build-vllm.sh
+bash scripts/02-fetch-model.sh
+bash scripts/03-serve-vllm.sh
+# OpenAI-compatible server: http://127.0.0.1:8000
+```
+
+Do not apply the 60 GiB BF16 requirement or TheRock/PyTorch setup to a GGUF-only
+installation. The exact hybrid reference layers and why they are needed are
+documented in the [CDNA to RDNA adaptation map](adaptation.md#packaging-and-runtime-layers).
+
+## Historical ROCm 7.2.1 reference
+
+The system `/opt/rocm` installation is preserved for the historical vLLM/BF16
+stack and regression evidence. It is a fallback, not the recommended first-run
+path. The immutable 7.2.1 matrix and the scoped ROCm 7.14 GGUF matrix remain
+separate in the [validation-track index](results/README.md).

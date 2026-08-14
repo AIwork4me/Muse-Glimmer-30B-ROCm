@@ -1,0 +1,55 @@
+{
+  "study": "study2",
+  "weight": "17gb",
+  "dflash": false,
+  "vision": false,
+  "np": 4,
+  "metrics": {
+    "agg_tok_s": 21.92870684767088,
+    "total_tokens": 11680,
+    "wall_s": 532.534090850997,
+    "ttft_p50": 0.8250740564908483,
+    "ttft_p90": 1.1705251683015376,
+    "tpot_median": 0.17498287863992046,
+    "agg_tok_s_min": 19.91949120605404,
+    "agg_tok_s_max": 21.955955661004385,
+    "reps": 5,
+    "finish_reason_dist": {
+      "length": 82,
+      "stop": 38
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 26983736,
+    "VmPeak_gib": 25.73,
+    "VmHWM_kib": 3145612,
+    "VmHWM_gib": 3.0,
+    "VmRSS_kib": 3145612,
+    "VmRSS_gib": 3.0,
+    "RssShmem_kib": 880504,
+    "RssShmem_gib": 0.84,
+    "vram_used_mib": 1111.7,
+    "vram_total_mib": 32768.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 0.0,
+    "draft_tokens": 0.0,
+    "avg_accepted_per_step": null
+  },
+  "acceptance_source": "metrics",
+  "power_temp": {
+    "power_w": null,
+    "temp_c": 62.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 4 -c 32768 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64",
+    "seed": 42,
+    "reps": 5,
+    "build": "0b1bad1",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon 8060S Graphics\", \"Card Model\": \"0x1586\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"STRXLGEN\", \"Subsystem ID\": \"-0x72ff\", \"Device Rev\": \"0xd1\", \"Node ID\": \"1\", \"GUID\": \"21984\", \"GFX Version\": \"gfx1151\"}}",
+    "kernel": "6.17.0-1032-oem",
+    "date": "2026-08-13"
+  }
+}

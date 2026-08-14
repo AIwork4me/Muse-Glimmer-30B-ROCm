@@ -3,8 +3,9 @@
 
 Joins per-cell JSON records on (study, weight, np, dflash, vision) across two
 matrix directories and renders a markdown table of the headline-metric deltas:
-tok/s (median + min/max), TTFT p50/p90, TPOT median, VmPeak, DFlash acceptance,
-temp. Pathological (non-completing) and one-sided cells are reported, not dropped.
+aggregate tok/s, TTFT p50/p90, TPOT median, VmPeak and DFlash acceptance.
+Pathological (non-completing) and one-sided cells are reported, not dropped.
+Malformed or duplicate cells fail closed.
 
 Usage:
     scripts/compare_rocm.py [--a DIR] [--b DIR] [--label-a NAME] [--label-b NAME]
@@ -14,24 +15,45 @@ Designed to be run after the 7.14.0 matrix exists; degrades gracefully when the
 7.14 dir is empty or partially populated (reduced-scope first pass = 17 cells).
 """
 from __future__ import annotations
-import argparse, glob, json, os, sys
+
+import argparse
+import glob
+import json
+import os
+import sys
 from statistics import mean
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def load_matrix(d: str) -> dict:
-    """Return {key: record} for every cell-*.json in dir d. key = (study,weight,np,dflash,vision)."""
+    """Load cells keyed by (study, weight, np, dflash, vision), failing closed."""
     out = {}
     for f in sorted(glob.glob(os.path.join(d, "cell-*.json"))):
         try:
-            r = json.load(open(f))
-        except Exception as e:
-            print(f"warn: skip unparseable {f}: {e}", file=sys.stderr)
-            continue
-        if not all(k in r for k in ("study", "weight", "np", "dflash", "vision")):
-            continue
-        out[(r["study"], r["weight"], int(r["np"]), bool(r["dflash"]), bool(r["vision"]))] = r
+            with open(f, encoding="utf-8") as handle:
+                record = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"cannot parse benchmark cell {f}: {exc}") from exc
+        if not isinstance(record, dict):
+            raise ValueError(f"benchmark cell {f} must contain a JSON object")
+        identity = ("study", "weight", "np", "dflash", "vision")
+        missing = [name for name in identity if name not in record]
+        if missing:
+            raise ValueError(f"benchmark cell {f} lacks identity fields: {missing}")
+        valid_types = (
+            isinstance(record["study"], str),
+            isinstance(record["weight"], str),
+            isinstance(record["np"], int) and not isinstance(record["np"], bool),
+            isinstance(record["dflash"], bool),
+            isinstance(record["vision"], bool),
+        )
+        if not all(valid_types):
+            raise ValueError(f"benchmark cell {f} has invalid identity field types")
+        key = tuple(record[name] for name in identity)
+        if key in out:
+            raise ValueError(f"duplicate benchmark cell identity {key}: {f}")
+        out[key] = record
     return out
 
 
@@ -73,13 +95,30 @@ def cell_label(rec) -> str:
     return f"{w} np{rec['np']}{tag}{vis}"
 
 
+def tpot_deltas_by_concurrency(a: dict, b: dict) -> dict[int, list[float]]:
+    """Return comparable, non-pathological TPOT deltas grouped by concurrency."""
+    grouped: dict[int, list[float]] = {}
+    for key in sorted(set(a) & set(b)):
+        before, after = a[key], b[key]
+        if before.get("pathological") or after.get("pathological"):
+            continue
+        tpot_before = num(before, "metrics", "tpot_median")
+        tpot_after = num(after, "metrics", "tpot_median")
+        if tpot_before is None or tpot_after is None:
+            continue
+        delta = pct(tpot_before, tpot_after)
+        if delta is not None:
+            grouped.setdefault(key[2], []).append(delta)
+    return grouped
+
+
 METRICS = [
-    # (header, path..., prec, is_speed_higher_better)
-    ("tok/s", ("metrics", "agg_tok_s"), 2, True),
-    ("TTFT p50 ms", ("metrics", "ttft_p50"), 1, False),
-    ("TTFT p90 ms", ("metrics", "ttft_p90"), 1, False),
-    ("TPOT ms", ("metrics", "tpot_median"), 1, False),
-    ("VmPeak GiB", ("mem", "VmPeak_gib"), 2, False),
+    # (header, JSON path, display precision, display scale)
+    ("aggregate tok/s", ("metrics", "agg_tok_s"), 2, 1.0),
+    ("TTFT p50 ms", ("metrics", "ttft_p50"), 1, 1000.0),
+    ("TTFT p90 ms", ("metrics", "ttft_p90"), 1, 1000.0),
+    ("TPOT ms", ("metrics", "tpot_median"), 1, 1000.0),
+    ("VmPeak GiB", ("mem", "VmPeak_gib"), 2, 1.0),
 ]
 
 
@@ -89,25 +128,19 @@ def render(a: dict, b: dict, la: str, lb: str) -> str:
     lines.append(f"# ROCm {la} vs {lb} — cell-by-cell comparison\n")
     lines.append(f"- **{la}:** {len(a)} cells   **{lb}:** {len(b)} cells   **compared:** {len(set(a) & set(b))}\n")
 
-    # speedup-summary stats over cells present in both arms with real metrics
-    d_tok = []
-    for k in keys:
-        ra, rb = a.get(k), b.get(k)
-        if not (ra and rb):
-            continue
-        if ra.get("pathological") or rb.get("pathological"):
-            continue
-        ta = num(ra, "metrics", "agg_tok_s"); tb = num(rb, "metrics", "agg_tok_s")
-        if ta and tb:
-            d_tok.append(pct(ta, tb))
-
-    if d_tok:
-        faster = sum(1 for d in d_tok if d > 0)
-        slower = sum(1 for d in d_tok if d < 0)
-        lines.append("## Summary (tok/s, both arms measured)\n")
-        lines.append(f"- cells **faster** on {lb}: **{faster}/{len(d_tok)}**, **slower**: {slower}")
-        lines.append(f"- mean tok/s Δ: **{fmtp(mean(d_tok))}**   "
-                     f"range: {fmtp(min(d_tok))} … {fmtp(max(d_tok))}\n")
+    # TPOT is less confounded by sampling-length divergence than aggregate tok/s.
+    d_tpot = tpot_deltas_by_concurrency(a, b)
+    if d_tpot:
+        lines.append("## Summary (TPOT, both arms measured)\n")
+        lines.append("- TPOT is the primary, less length-confounded cross-version metric; "
+                     "negative Δ means lower per-token decode latency.")
+        for concurrency in sorted(d_tpot):
+            deltas = d_tpot[concurrency]
+            lines.append(f"- np={concurrency}: n={len(deltas)}, mean Δ "
+                         f"**{fmtp(mean(deltas))}**, range "
+                         f"{fmtp(min(deltas))} … {fmtp(max(deltas))}")
+        lines.append("- Aggregate tok/s remains in the tables, but sampled Study 2/3 "
+                     "comparisons can be generation-length-confounded.\n")
 
     by_study = {}
     for k in keys:
@@ -116,7 +149,7 @@ def render(a: dict, b: dict, la: str, lb: str) -> str:
     for st in sorted(by_study):
         lines.append(f"## {st}\n")
         hdr = ["cell"]
-        for name, _p, _pr, _h in METRICS:
+        for name, _path, _precision, _scale in METRICS:
             hdr += [f"{la} {name}", f"{lb} {name}", "Δ"]
         hdr.append(f"{lb} accept")
         lines.append("| " + " | ".join(hdr) + " |")
@@ -124,12 +157,13 @@ def render(a: dict, b: dict, la: str, lb: str) -> str:
         for k in by_study[st]:
             ra, rb = a.get(k), b.get(k)
             row = [cell_label(rb or ra)]
-            for _name, p, pr, higher in METRICS:
-                va = num(ra, *p) if ra else None
-                vb = num(rb, *p) if rb else None
-                d = pct(va, vb)
-                # for latency/footprint (lower better) invert the Δ sign coloring semantics in text only
-                row += [fmt(va, pr), fmt(vb, pr), fmtp(d)]
+            for _name, path, precision, scale in METRICS:
+                raw_a = num(ra, *path) if ra else None
+                raw_b = num(rb, *path) if rb else None
+                delta = pct(raw_a, raw_b)
+                va = raw_a * scale if raw_a is not None else None
+                vb = raw_b * scale if raw_b is not None else None
+                row += [fmt(va, precision), fmt(vb, precision), fmtp(delta)]
             # acceptance (DFlash cells)
             acc = num(rb, "acceptance", "acceptance_rate") if rb and rb["dflash"] else None
             row.append(fmt(acc * 100, 1) + "%" if acc is not None else "—")
@@ -149,10 +183,11 @@ def render(a: dict, b: dict, la: str, lb: str) -> str:
         lines.append("")
 
     lines.append("## Notes\n")
-    lines.append(f"- Δ = ({lb} − {la}) / {la} × 100. **Positive Δ on tok/s = {lb} is faster**; "
+    lines.append(f"- Δ = ({lb} − {la}) / {la} × 100. **Positive Δ on aggregate tok/s = {lb} is faster**; "
                  f"positive Δ on TTFT/TPOT/VmPeak = {lb} is slower/higher.")
     lines.append("- `—` = metric absent (baseline cells have no acceptance; pathological cells have no metrics).")
-    lines.append(f"- Only ROCm differs across arms: same llama.cpp build `0b1bad1`, flags, weights, prompt set, seeds.")
+    lines.append("- Recorded invariants across arms: llama.cpp commit, flags, weights, prompt set and seeds; "
+                 "the comparison intentionally changes the ROCm runtime.")
     return "\n".join(lines) + "\n"
 
 
@@ -165,15 +200,19 @@ def main():
     ap.add_argument("-o", "--out", default=None, help="also write markdown to this file")
     args = ap.parse_args()
 
-    a = load_matrix(args.a)
-    b = load_matrix(args.b)
+    try:
+        a = load_matrix(args.a)
+        b = load_matrix(args.b)
+    except ValueError as exc:
+        ap.error(str(exc))
     if not a:
         sys.exit(f"no cells found in --a {args.a}")
     md = render(a, b, args.label_a, args.label_b)
     print(md)
     if args.out:
         os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-        open(args.out, "w").write(md)
+        with open(args.out, "w", encoding="utf-8") as handle:
+            handle.write(md)
         print(f"\n(wrote {args.out})", file=sys.stderr)
 
 

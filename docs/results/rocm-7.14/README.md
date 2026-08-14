@@ -1,11 +1,125 @@
-# ROCm 7.14 validation track
+# ROCm 7.14 scoped validation track
 
-ROCm 7.14 is the forward/current official gfx1151 validation target. This
-directory is a protocol, not a claim that the full stack has passed.
+This repository project-validated a reduced **GGUF/llama.cpp** matrix using
+AMD's official ROCm 7.14.0 gfx1151 tarball on Ryzen AI MAX+ PRO 395 / Radeon
+8060S. AMD's [ROCm 7.14 release notes](https://rocm.docs.amd.com/en/docs-7.14.0/about/release-notes.html)
+list that exact platform as `gfx1151`; AMD's [GPU specifications](https://rocm.docs.amd.com/en/latest/reference/gpu-arch-specs.html)
+also map the 395 / 8060S to RDNA 3.5 and `gfx1151`. Muse-Glimmer workload
+validation and benchmark evidence here are independent project results.
+**Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM validation
+pending.** Historical vLLM/BF16 remains validated on the 7.2.1 reference.
+Current rocBLAS BF16-GEMM proxy results did not justify prioritizing a 7.14
+rebuild; they do not establish zero value for a future cohesive 7.14 stack.
 
-The historical ROCm 7.2.1 evidence remains in `../matrix/`. In-progress 7.14
-GGUF cells are written to `../matrix-714/` so the two tracks cannot overwrite
-one another.
+The historical ROCm 7.2.1 evidence remains in `../matrix/`. The 17 ROCm 7.14
+cells remain in `../matrix-714/`; all four `np=16` cells were intentionally
+deferred. The [scoped validation manifest](../../../configs/rocm-7.14-gguf-validation.json)
+records the archive, runtime, engine, model and evidence identities.
+
+## Result summary — GGUF matrix (2026-08-13)
+
+Recorded invariants include llama.cpp `0b1bad1`, flags, model artifacts, prompt
+set and seeds; the intended experimental variable is the ROCm runtime. Mean TPOT
+deltas were −0.4% at `np=1` and −1.7% at `np=4`. Those cell-level means are
+descriptive and do not establish a general equivalence bound or speedup.
+
+All 17 ROCm 7.14 cells had a lower VmPeak mapped-address-space envelope (mean
+−2.8%). The operator observed no system incident during the six-hour run, but
+raw dmesg/amdgpu logs were not retained. This result is therefore not a
+standalone stability qualification.
+
+### Why TPOT is the primary cross-version metric
+
+In sampled Study 2/3 cells, generated-token counts differ across versions.
+Aggregate tok/s includes that count and is therefore length-confounded. TPOT
+normalizes decode time by generated tokens and is less length-confounded, but it
+still includes scheduling, workload and measurement variation. No profiler
+counters or independent run-level repeats were retained.
+
+Study 1 used greedy decoding. Its records have equal total token counts and
+finish-reason distributions across versions. Raw response text and token hashes
+were not retained, so the repository does not claim identical token streams.
+
+| Observed metric | Result |
+|---|---|
+| **TPOT `np=1`** (11 cells) | mean **−0.4%**, range −6.4%…+9.0% |
+| **TPOT `np=4`** (6 cells) | mean **−1.7%**, range −5.4%…+0.2% |
+| **Greedy Study 1 baselines** | +0.5% / +0.3% TPOT |
+| **Greedy Study 1 DFlash** | −5.8% / −6.4% TPOT; causal attribution needs repeats/profiling |
+| **VmPeak envelope** | mean −2.8%; lower in all 17 cells (range −1.8%…−7.0%) |
+| **DFlash acceptance** | similar; largest observed difference 1.21 percentage points |
+| **Run observation** | no incident observed in six hours; raw system logs not retained |
+
+### Table A — Study 1 (greedy, `temp=0`): TPOT
+
+This is the least length-confounded subset. It is descriptive, not an
+equivalence or causal performance proof.
+
+| weight | mode | 7.2.1 TPOT (s) | 7.14 TPOT (s) | Δ |
+|---|---|---|---|---|
+| 17gb | baseline | 0.0942 | 0.0947 | +0.5% |
+| 17gb | DFlash | 0.0482 | 0.0454 | **−5.8%** |
+| dynamic | baseline | 0.1082 | 0.1085 | +0.3% |
+| dynamic | DFlash | 0.0486 | 0.0455 | **−6.4%** |
+
+The two DFlash cells had ~6% lower TPOT on 7.14; independent repeats and
+profiling are needed before attributing that observation to the runtime.
+
+### Table B — c=4: TPOT (less length-confounded) vs aggregate tok/s
+
+| cell | 7.2.1 TPOT | 7.14 TPOT | TPOT Δ | agg tok/s Δ | tokens 7.14/7.2.1 |
+|---|---|---|---|---|---|
+| 17gb base | 0.1778 | 0.1750 | −1.6% | **+40.6%** | **1.36×** |
+| 17gb DFlash | 0.1066 | 0.1039 | −2.5% | +18.7% | 1.20× |
+| dynamic base | 0.1809 | 0.1711 | −5.4% | +0.5% | 0.94× |
+| dynamic DFlash | 0.1212 | 0.1214 | +0.2% | +10.2% | 1.09× |
+| 17gb base vision | 0.1768 | 0.1752 | −0.9% | −0.6% | 0.94× |
+| dynamic base vision | 0.1758 | 0.1757 | −0.1% | +1.1% | 0.97× |
+
+**Reading this table:** the +40.6% aggregate result coincides with 1.36× as many
+generated tokens, while TPOT changed −1.6%. It is not evidence of a 40% decode
+speedup. TPOT reduces this length confound but does not isolate a kernel-level
+cause (see [METHODOLOGY.md §12](../METHODOLOGY.md)).
+
+### Table C — observed DFlash acceptance
+
+| cell | 7.2.1 accept | 7.14 accept |
+|---|---|---|
+| study1 17gb c1 | 23.3% | 23.3% |
+| study1 dynamic c1 | 23.7% | 23.6% |
+| study2 17gb c1 | 20.7% | 19.4% |
+| study2 17gb c4 | 18.4% | 18.6% |
+| study2 dynamic c1 | 19.4% | 19.4% |
+| study2 dynamic c4 | 19.2% | 19.2% |
+| study3 17gb c1 | 18.8% | 18.8% |
+
+The recorded drafter, model, draft limit and seeds are the same. Acceptance
+rates are similar; the largest observed difference is 1.21 percentage points.
+This evidence does not by itself prove which runtime component caused a TPOT
+change.
+
+### Table D — VmPeak mapped-address-space envelope (mean −2.8%)
+
+All 17 cells recorded a lower VmPeak on 7.14 (range −1.8%…−7.0%). VmPeak is
+virtual address-space size, not resident physical memory; this is an observed
+mapped-memory envelope difference.
+
+Full per-cell table (all metrics, both arms): [`../matrix-714/comparison.md`](../matrix-714/comparison.md).
+Rendered 7.14 matrix: [`../matrix-714/matrix.md`](../matrix-714/matrix.md).
+Per-cell summary evidence: [`../matrix-714/cell-*.json`](../matrix-714/) (each carries
+`manifest.rocm_version = "7.14.0"`).
+
+### c=16 — deferred (per scope), not re-run
+
+The 4 c=16 cells are 7.2.1-only by design (this first pass excludes c=16 to
+limit sustained-load freeze risk). On 7.2.1 the c=16 **baselines** were healthy
+(17gb 34.5, dynamic 31.0 tok/s) and the c=16 **DFlash** cells were pathological
+([warning](../benchmark.md#c16-dflash-do-not-use)). All four remain deferred;
+the reduced run does not qualify the omitted high-concurrency scope.
+
+---
+
+## Protocol
 
 ## Invariants
 
@@ -22,25 +136,23 @@ Record every intentional difference.
 
 ## Phase 0 — safety and provenance
 
-- [ ] Preserve `docs/results/matrix/` unchanged.
-- [ ] Record `git status --short` and the repository commit.
-- [ ] Verify all selected model artifacts with `scripts/verify_artifacts.py`.
-- [ ] Record kernel, GPU/gfx target, memory pool and ROCm prefix.
-- [ ] Confirm no benchmark server is already bound to ports 8080/8090.
-- [ ] Keep the 7.14 install side-by-side; do not replace `/opt/rocm` merely to run this track.
-
-Example preflight:
-
-```bash
-python3 scripts/verify_artifacts.py gguf models
-git -C third_party/llama.cpp rev-parse HEAD
-uname -r
-rocminfo | grep -m1 gfx1151
-```
+- [x] Preserve `docs/results/matrix/`; its Git tree matches base commit `97882c4`.
+- [x] Record repository base `97882c40347329b7d7b471bf1a586f7481e18494`
+  and llama.cpp `0b1bad14ff204627636aeb1de22ddcd5acb859d4`.
+- [x] Verify the GGUF artifact set from `configs/artifact-manifest.json`.
+- [x] Record kernel `6.17.0-1032-oem`, hardware/gfx identity and the side-by-side
+  ROCm 7.14.0 prefix.
+- [x] Confirm no benchmark server already bound to 8080/8090.
+- [x] Keep the 7.14 install side-by-side; the ROCm 7.2.1 system stack stayed
+  untouched.
 
 ## Phase 1 — environment initialization
 
-Select the 7.14 prefix for one shell/process only:
+- [x] Select the 7.14 prefix for one process only (`PATH`/`LD_LIBRARY_PATH`).
+- [x] Record the official archive size (1,713,449,440 bytes) and full SHA256
+  `2567d5e34e470db104a62a02c36aa770cb0430175e48c1c46df0eefc05e1d77c`.
+- [x] Record HIP `7.14.60850-0000000` and LLVM build identity in the scoped
+  validation manifest.
 
 ```bash
 export ROCM_PREFIX="$HOME/rocm-7.14.0"
@@ -49,77 +161,71 @@ export LD_LIBRARY_PATH="$ROCM_PREFIX/lib:${LD_LIBRARY_PATH:-}"
 hipcc --version
 ```
 
-Capture the exact package/release source and prefix. “ROCm 7.14” without those
-details is insufficient provenance.
-
 ## Phase 2 — llama.cpp build and smoke
 
-Build the same pinned source into a separate directory:
-
-```bash
-cmake -S third_party/llama.cpp -B third_party/llama.cpp/build-714 \
-  -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1151 -DCMAKE_BUILD_TYPE=Release
-cmake --build third_party/llama.cpp/build-714 -j
-ldd third_party/llama.cpp/build-714/bin/llama-server
-```
-
-Gates:
-
-- [ ] Build reports the pinned source commit.
-- [ ] Binary links to the intended 7.14 prefix.
-- [ ] Text model loads and completes a short greedy request.
-- [ ] Vision projector loads and grounds one response.
-- [ ] DFlash log shows non-zero drafted/accepted tokens.
-- [ ] No system instability during smoke tests.
+- [x] Build pinned source `0b1bad1` into `build-714/` (`-DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1151`, `ROCM_PATH`/`hip_DIR` → 7.14).
+- [x] Binary links to 7.14 under the 7.14 env (no `/opt/rocm-7.2.1` leak).
+- [x] Text model loads and answers `17 × 23 → 391` (greedy smoke).
+- [x] DFlash log shows non-zero drafted/accepted tokens (see cell `/metrics` probe).
+- [x] Operator observed no incident during smoke tests; standalone system logs
+  were not retained.
 
 ## Phase 3 — GGUF matrix
 
-The dedicated wrapper selects the 7.14 binary and output directory:
+- [x] `run-gguf-matrix-714.sh --dry-run all` → 17 cells (c=16 excluded).
+- [x] `run-gguf-matrix-714.sh all` → 17/17 cells written to `matrix-714/` + rendered.
+- [x] `compare_rocm.py` reviewed for one-sided/missing cells (c=16 cells noted as 7.2.1-only).
+- [x] Reviewed TPOT, TTFT, aggregate tok/s, VmPeak, DFlash acceptance, vision,
+  finish reasons and recorded temperature; stability evidence is operator-level.
+- [x] Every new cell carries `manifest.rocm_version = "7.14.0"`.
+
+## Phase 4 — BF16/vLLM: proxy evaluated; validation pending
+
+The full ROCm 7.14 Muse-Glimmer vLLM rebuild and validation was not prioritized
+for v0.1. A minimal proxy did not show a consistent BF16-compute improvement
+across the sampled GEMM shapes. The proxy informed prioritization; it is not a
+statistical equivalence test or a validation of a future cohesive stack:
+
+- vLLM BF16 at **c=1 is bandwidth-bound** (4.2 tok/s ≈ the 56 GB-BF16/token
+  bandwidth ceiling) — unchanged by ROCm version.
+- vLLM BF16 at **c≥4 is GEMM(compute)-bound**, so we measured rocBLAS BF16-GEMM
+  throughput on both ROCm versions (`scripts/bench_rocblas_gemm.cpp`, exercising
+  the actual gfx1151 GEMM kernels each `librocblas` ships):
+
+| GEMM (bf16) | ROCm 7.2.1 | ROCm 7.14.0 | Δ |
+|---|---|---|---|
+| 4096³ | 3.5 TFLOPS | 3.9 TFLOPS | +11% |
+| 8192×8192×4096 | 3.6 TFLOPS | 3.6 TFLOPS | 0% |
+| 12288³ | 3.1 TFLOPS | 2.9 TFLOPS | −6% |
+| **mean** | **3.4** | **3.5** | **≈ +2% (noise)** |
+
+The sampled proxy showed no consistent direction: one shape improved, one was
+flat, and one regressed. Those current results did not justify prioritizing the
+ROCm 7.14 vLLM rebuild for v0.1. They do not prove that a future cohesive ROCm
+7.14 vLLM stack has zero user-perceivable value. Historical vLLM/BF16 validation
+stays on the 7.2.1 reference; the default single-user path is Q4/llama.cpp.
+
+Reproduce the proxy:
 
 ```bash
-bash scripts/run-gguf-matrix-714.sh --dry-run all
-bash scripts/run-gguf-matrix-714.sh all
+for V in /opt/rocm-7.2.1 "$HOME/rocm-7.14.0"; do
+  PATH="$V/bin:$PATH" hipcc scripts/bench_rocblas_gemm.cpp -I"$V/include" -L"$V/lib" -lrocblas -O3 -o /tmp/gemm
+  LD_LIBRARY_PATH="$V/lib" /tmp/gemm
+done
 ```
-
-The first pass excludes c=16 because sustained-load stability is itself under
-validation. Run it only after the reduced pass is stable and retain any failure
-as a result.
-
-Compare without editing either arm:
-
-```bash
-uv run --no-sync python scripts/compare_rocm.py \
-  --a docs/results/matrix --b docs/results/matrix-714 \
-  --label-a 7.2.1 --label-b 7.14.0
-```
-
-Review TTFT, TPOT, aggregate tok/s, mapped-memory envelope, DFlash acceptance,
-vision behavior, finish reasons, temperature and stability—not only median
-throughput.
-
-## Phase 4 — BF16/vLLM validation
-
-This is separate from the GGUF matrix and remains pending until a matching
-7.14/TheRock Python stack is installed without disturbing the historical one.
-
-- [ ] Python/runtime environment captured.
-- [ ] BF16 artifacts hash-verified.
-- [ ] vLLM source commit and patches recorded.
-- [ ] Model initialization completes.
-- [ ] `TRITON_ATTN` serve path completes text and vision requests.
-- [ ] Reasoning and ATEM tool-call parsers validated.
-- [ ] TTFT, TPOT and aggregate throughput captured.
-- [ ] Memory methodology includes VmPeak, RSS/HWM and stronger counters where available.
-- [ ] Long-context sanity test completed with the exact tested length recorded.
-- [ ] Sustained stability window and request count recorded.
-- [ ] DFlash status reported separately; no inference from llama.cpp to vLLM.
 
 ## Publication gate
 
-A ROCm 7.14 result becomes “validated” only when:
+A ROCm 7.14 result may be labeled **project-validated within an explicit scope**
+only when:
 
-- required cells/tests are complete or explicitly recorded as negative findings;
-- artifacts and source revisions match the manifests;
-- raw outputs and exact commands are committed;
-- the comparison is reviewed for one-sided/missing cells;
-- README wording is updated without altering the ROCm 7.2.1 history.
+- completed and deferred cells are explicit: ✓ (17/21; four `np=16` deferred)
+- artifact, runtime and source identities are recorded: ✓
+- per-cell summaries, exact flags and SHA256 inventory are committed: ✓
+- absent raw response/server/system logs are disclosed: ✓
+- one-sided cells and metric confounds are reviewed: ✓
+- the ROCm 7.2.1 history remains unchanged: ✓
+
+**GGUF/llama.cpp status: project-validated within the recorded 17-cell scope.**
+**Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM validation
+pending.** The four `np=16` GGUF cells remain deferred.

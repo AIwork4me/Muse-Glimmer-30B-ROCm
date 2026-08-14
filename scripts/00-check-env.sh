@@ -1,57 +1,188 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# uv usually lives at ~/.local/bin; make sure later tasks/services can find it
-# even when invoked with a minimal PATH (systemd, cron, subprocess from pytest).
-command -v uv >/dev/null 2>&1 || export PATH="$HOME/.local/bin:$PATH"
+fail() {
+    echo "FAIL: $1" >&2
+    echo "    see docs/troubleshooting.md" >&2
+    exit 1
+}
+warn() { echo "WARNING: $1" >&2; }
+usage() {
+    cat <<'EOF'
+Usage: bash scripts/00-check-env.sh [--profile gguf|vllm|reference]
 
-fail() { echo "FAIL: $1" >&2; echo "    see docs/troubleshooting.md" >&2; exit 1; }
+Profiles:
+  gguf       Default llama.cpp/GGUF path; no Python package, uv, or PyTorch requirement.
+  vllm       Advanced BF16 path using the validated ROCm 7.2.1 reference stack.
+  reference  Certify the exact historical host/runtime envelope.
+EOF
+}
+
+PROFILE="gguf"
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --profile)
+            [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+            PROFILE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "ERROR: unknown argument: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+case "$PROFILE" in
+    gguf|vllm|reference) ;;
+    *)
+        echo "ERROR: invalid profile: $PROFILE" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib/version.sh
 source "$ROOT/scripts/lib/version.sh"
+# shellcheck source=scripts/lib/rocm.sh
+source "$ROOT/scripts/lib/rocm.sh"
+
 read_manifest() {
     python3 - "$ROOT/configs/validated-stack.json" "$1" <<'PY'
 import json, sys
-value = json.load(open(sys.argv[1]))
-for key in sys.argv[2].split('.'):
+value = json.load(open(sys.argv[1], encoding="utf-8"))
+for key in sys.argv[2].split("."):
     value = value[key]
-print(value)
+if isinstance(value, list):
+    print("\n".join(value))
+else:
+    print(value)
+PY
+}
+read_default_gguf_bytes() {
+    python3 - "$ROOT/configs/artifact-manifest.json" <<'PY'
+import json, sys
+files = json.load(open(sys.argv[1], encoding="utf-8"))["sets"]["gguf"]["files"]
+for item in files:
+    if item["path"] == "muse-glimmer-30B-kquant-17gb.gguf":
+        print(item["size_bytes"])
+        break
+else:
+    raise SystemExit("default GGUF is absent from the artifact manifest")
 PY
 }
 
 MIN_KERNEL="$(read_manifest host.minimum_kernel)"
 MIN_VISIBLE_GIB="$(read_manifest host.gpu_visible_memory_min_gib)"
+REFERENCE_ROCM="$(read_manifest host.rocm_toolchain)"
+REFERENCE_PYTHON="$(read_manifest python.version)"
+REFERENCE_TORCH="$(read_manifest pytorch.version)"
+GGUF_MODEL_BYTES="$(read_default_gguf_bytes)"
+# The published GGUF runs used the real 94 GiB Strix Halo host, whose gfx1151
+# coarse-grained pool is 80 GiB. This is a warning boundary, not a minimum.
+GGUF_REFERENCE_VISIBLE_GIB=80
 
+echo "Environment profile: $PROFILE"
+case "$PROFILE" in
+    gguf) echo "  path: default llama.cpp + GGUF" ;;
+    vllm) echo "  path: optional advanced vLLM + BF16" ;;
+    reference) echo "  path: exact historical vLLM/BF16 reference" ;;
+esac
 
-# ROCm version (accept 7.2.x)
-rocm_ver="$(cat /opt/rocm/.info/version 2>/dev/null || echo none)"
-echo "ROCm: $rocm_ver"
-[[ "$rocm_ver" == 7.2.* ]] || fail "expected ROCm 7.2.x, got $rocm_ver"
+resolve_rocm_prefix || exit 1
+export PATH="$ROCM_PREFIX/bin:$PATH"
+rocm_ver="$(detect_rocm_version "$ROCM_PREFIX")"
+print_selected_rocm "$rocm_ver"
 
-# Kernel floor (fixes the 15.5 GB UMA bug). Compare major, minor, and patch.
+case "$PROFILE" in
+    gguf)
+        case "$rocm_ver" in
+            7.14.*) ;;
+            7.2.*)
+                warn "using the historical ROCm $rocm_ver fallback; ROCm 7.14 is recommended."
+                ;;
+            *) fail "GGUF profile expects ROCm 7.14.x or historical 7.2.x; got '$rocm_ver'" ;;
+        esac
+        ;;
+    vllm|reference)
+        [ "$rocm_ver" = "$REFERENCE_ROCM" ] ||
+            fail "$PROFILE profile requires the validated ROCm $REFERENCE_ROCM toolchain; set ROCM_PREFIX=/opt/rocm."
+        ;;
+esac
+
 krel="$(uname -r)"
 echo "kernel: $krel"
-version_at_least "$krel" "$MIN_KERNEL" \
-  || fail "kernel >= $MIN_KERNEL required (see docs/troubleshooting.md#uma-bug); got $krel"
+version_at_least "$krel" "$MIN_KERNEL" ||
+    fail "project Strix Halo host floor is kernel >= $MIN_KERNEL (docs/troubleshooting.md#uma-bug); got $krel"
+if [ "$PROFILE" = "reference" ]; then
+    reference_kernel=0
+    while IFS= read -r observed; do
+        [ "$krel" = "$observed" ] && reference_kernel=1
+    done < <(read_manifest host.observed_benchmark_kernels)
+    [ "$reference_kernel" -eq 1 ] ||
+        fail "reference profile requires a recorded benchmark kernel; got $krel"
+fi
 
-# gfx target.
-# Buffer rocminfo output: `grep -q` exits on first match, and under `pipefail`
-# a live `rocminfo` still writing gets SIGPIPE (exit 141), falsely failing the
-# check. Capture first, then grep the buffer (no broken pipe).
-rocminfo_out="$(rocminfo 2>/dev/null || true)"
-grep -q "gfx1151" <<<"$rocminfo_out" || fail "gfx1151 not found in rocminfo"
+# Buffer rocminfo output. A live rocminfo piped to grep -q can receive SIGPIPE
+# under pipefail, so parsing always uses the complete captured output.
+rocminfo_out="$("$ROCM_PREFIX/bin/rocminfo" 2>/dev/null || true)"
+grep -q "gfx1151" <<<"$rocminfo_out" || fail "gfx1151 not found in $ROCM_PREFIX/bin/rocminfo"
 
-# GPU-visible unified-memory pool. Parse the first coarse-grained global pool
-# belonging to the gfx1151 agent. This matches torch's visible 80 GiB pool on
-# the validated host and keeps the preflight usable before `uv sync`.
+# First coarse-grained global pool belonging to the gfx1151 agent.
 vram_kb="$(awk '
   /Name:[[:space:]]+gfx1151/ { gpu = 1 }
   gpu && /Segment:[[:space:]]+GLOBAL; FLAGS: COARSE GRAINED/ { coarse = 1; next }
   coarse && /Size:/ { size = $2; sub(/\(.*/, "", size); print size; exit }
 ' <<<"$rocminfo_out")"
-[[ "$vram_kb" =~ ^[0-9]+$ ]] || fail "could not read gfx1151 global memory pool from rocminfo"
+[[ "$vram_kb" =~ ^[0-9]+$ ]] ||
+    fail "could not read gfx1151 global memory pool from rocminfo"
 echo "GPU-visible pool: $(( vram_kb / 1024 / 1024 )) GiB"
-min_visible_kib=$(( MIN_VISIBLE_GIB * 1024 * 1024 ))
-[ "$vram_kb" -ge "$min_visible_kib" ] || fail "VRAM pool < $MIN_VISIBLE_GIB GiB; check UMA carve-out (docs/troubleshooting.md#uma-bug)"
 
-echo "OK: environment ready for Muse-Glimmer-30B on gfx1151"
+if [ "$PROFILE" = "gguf" ]; then
+    min_gguf_kib=$(( (GGUF_MODEL_BYTES + 1023) / 1024 ))
+    if [ "$vram_kb" -lt "$min_gguf_kib" ]; then
+        fail "GPU-visible pool is smaller than the $GGUF_MODEL_BYTES-byte default GGUF; full GPU offload cannot fit the weights."
+    fi
+    reference_visible_kib=$(( GGUF_REFERENCE_VISIBLE_GIB * 1024 * 1024 ))
+    if [ "$vram_kb" -lt "$reference_visible_kib" ]; then
+        warn "memory configuration is outside the validated 94 GiB Strix Halo / 80 GiB visible-pool reference envelope; the default GGUF may still run."
+    fi
+else
+    min_visible_kib=$(( MIN_VISIBLE_GIB * 1024 * 1024 ))
+    [ "$vram_kb" -ge "$min_visible_kib" ] ||
+        fail "GPU-visible pool < $MIN_VISIBLE_GIB GiB required by the validated BF16 vLLM path."
+fi
+
+if [ "$PROFILE" != "gguf" ]; then
+    command -v uv >/dev/null 2>&1 || export PATH="${HOME:?HOME is required}/.local/bin:$PATH"
+    command -v uv >/dev/null 2>&1 ||
+        fail "uv is required for the optional vLLM/BF16 profile."
+    python_version="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    [ "$python_version" = "$REFERENCE_PYTHON" ] ||
+        fail "$PROFILE profile requires Python $REFERENCE_PYTHON; got $python_version."
+    if ! uv run --no-sync python - "$REFERENCE_TORCH" <<'PY'
+import sys
+import torch
+
+expected = sys.argv[1]
+if torch.__version__ != expected:
+    raise SystemExit(f"expected torch {expected}, got {torch.__version__}")
+if torch.version.hip is None:
+    raise SystemExit("installed torch is not a ROCm build")
+if not torch.cuda.is_available():
+    raise SystemExit("TheRock PyTorch cannot access the GPU")
+if not torch.cuda.is_bf16_supported():
+    raise SystemExit("gfx1151 does not report BF16 support through PyTorch")
+print(f"TheRock PyTorch: {torch.__version__} (HIP {torch.version.hip})")
+PY
+    then
+        fail "pinned TheRock PyTorch/HIP/BF16 check failed; run 'uv sync --locked' for the optional vLLM path."
+    fi
+fi
+
+echo "OK: $PROFILE environment ready for Muse-Glimmer-30B on gfx1151"

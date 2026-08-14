@@ -1,0 +1,42 @@
+name: dependency-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/dependency-smoke.yml
+  pull_request:
+    paths:
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/dependency-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  therock-lock:
+    # This deliberately heavyweight job verifies the locked TheRock/ROCm
+    # dependency graph without charging every documentation or script PR for it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Resolve and install locked project dependencies
+        run: uv sync --dev --locked
+
+      - name: Import locked runtime
+        run: |
+          uv run --no-sync python -c \
+            'import aiohttp, huggingface_hub, torch, torchvision; print(torch.__version__)'

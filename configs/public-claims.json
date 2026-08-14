@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "validated_stack": "configs/validated-stack.json",
+  "artifact_manifest": "configs/artifact-manifest.json",
+  "validated_platform": {
+    "hardware": "AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S",
+    "gpu_arch": "gfx1151",
+    "status": "validated",
+    "evidence": "configs/validated-stack.json"
+  },
+  "reference_evidence": {
+    "rocm": "7.2.1",
+    "status": "validated-historical-reference",
+    "matrix": "docs/results/matrix/"
+  },
+  "forward_validation": {
+    "rocm": "7.14.0",
+    "status": "partially-validated",
+    "recommended": true,
+    "manifest": "configs/rocm-7.14-gguf-validation.json",
+    "tracks": [
+      {
+        "name": "GGUF/llama.cpp",
+        "status": "project-validated",
+        "scope": "17 of 21 planned cells; four np=16 cells deferred",
+        "evidence": "docs/results/matrix-714/"
+      },
+      {
+        "name": "BF16/vLLM",
+        "status": "pending",
+        "scope": "optional and not prioritized for v0.1: ROCm 7.14 Muse-Glimmer vLLM validation is pending; historical ROCm 7.2.1 vLLM validation remains available, and current rocBLAS BF16-GEMM proxy results did not justify prioritizing a 7.14 rebuild",
+        "evidence": "scripts/bench_rocblas_gemm.cpp"
+      }
+    ]
+  },
+  "hardware_matrix": [
+    {
+      "hardware": "Ryzen AI MAX+ PRO 395 / Radeon 8060S",
+      "gpu_arch": "gfx1151",
+      "status": "validated",
+      "evidence": "configs/validated-stack.json"
+    },
+    {
+      "hardware": "Radeon W7900",
+      "gpu_arch": "gfx1100",
+      "status": "community-validated",
+      "evidence": "docs/results/hardware-validation/w7900-gfx1100/manifest.json"
+    },
+    {
+      "hardware": "Other RDNA3 / future RDNA4",
+      "gpu_arch": "various",
+      "status": "planned"
+    },
+    {
+      "hardware": "MI300X / MI355X",
+      "gpu_arch": "CDNA",
+      "status": "upstream-recipe"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "hardware": {
+    "gpu": "Radeon W7900",
+    "gfx_target": "gfx1100",
+    "memory": "48 GiB dedicated GDDR6"
+  },
+  "software": {
+    "rocm": "7.2.4",
+    "kernel": "6.8.0-134-generic",
+    "python": "3.12.3",
+    "pytorch": "not used (llama.cpp / GGUF path)"
+  },
+  "model": {
+    "repository": "meta-models/Muse-Glimmer-30B-GGUF",
+    "revision": "a0532f7263ee67f1e0a5f5c5fdcd50dd62fc9aa4"
+  },
+  "inference": {
+    "path": "llama-cpp-gguf",
+    "command": "llama-server -m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 99 -fa on -np <slots> -c <slots*8192> --host 0.0.0.0 --port 8080 --jinja  (Study 2; DFlash adds: -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 16). Full harness: scripts/w7900-repro/"
+  },
+  "result": {
+    "status": "pass",
+    "throughput_tok_s": 293.29,
+    "known_issues": [
+      "DFlash speculative decoding is counter-productive at c>=8 (slower than baseline); reported only for c<=4."
+    ]
+  },
+  "evidence": {
+    "memory_methodology": "rocm-smi dedicated VRAM (real resident GDDR6 on gfx1100); peak 24.9 GiB of 48 at dynamic c=32.",
+    "artifact_url": "https://github.com/zihaomu/Muse-Glimmer-30B-ROCm/blob/w7900_update/docs/results/w7900-gfx1100.md",
+    "results": "docs/results/w7900-gfx1100.md",
+    "reproduction": "scripts/w7900-repro/"
+  }
+}

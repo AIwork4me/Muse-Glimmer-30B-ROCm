@@ -43,7 +43,7 @@ they submit equivalent evidence.
 | DFlash in vLLM | Model work includes DFlash support | Disabled on the vLLM path | The recorded run hit a draft-model registry problem; no fixed upstream status is claimed | **Temporary upstream limitation** |
 | DFlash in llama.cpp | Separate engine, not the MI recipe | Validated at c=1/c=4 with explicit `--spec-type draft-dflash` | Raw cells show 2.20×/2.39× at Study 1; omitting `--spec-type` silently disables drafting | **Validated workaround** |
 | DFlash at c=16 | No published comparable upstream cell | Do not use | Two negative cells record collapse/non-completion, including a 5 h 16 m aborted run | **Hardware/workload-specific negative finding** |
-| Kernel | Not specified by the MI recipe | Linux ≥ 6.16.9 | Older kernels expose only ~15.5 GiB of the unified pool on this host class ([ROCm #5444][uma]) | **ROCm-version-specific** |
+| Kernel | Not specified by the MI recipe | Project reference host: Linux ≥ 6.16.9 | This floor avoids the observed ~15.5 GiB UMA/KFD issue on the recorded host; AMD's supported kernel lines vary by distribution | **Host-specific validated workaround** |
 | Memory accounting | Dedicated HBM tools are meaningful | Record VmPeak, VmHWM/RSS and VRAM counters together | Unified-memory mmap/offload makes any one counter incomplete | **Hardware-specific measurement adaptation** |
 
 [recipe]: https://github.com/vllm-project/recipes/pull/776
@@ -125,8 +125,11 @@ that speculative decoding is generally unsuitable for RDNA.
 
 ## Kernel and unified memory
 
-The minimum kernel is **6.16.9**, including the patch component. The environment
-checker uses numeric major/minor/patch comparison:
+For this project's recorded Strix Halo host, the validated floor is **6.16.9**,
+including the patch component. This is not AMD's universal ROCm 7.14 minimum:
+AMD's [current RDNA3.5 guidance](https://rocm.docs.amd.com/en/latest/reference/system-optimization/rdna3-5.html)
+lists distribution-specific kernel lines. The environment checker uses numeric
+major/minor/patch comparison for the project floor:
 
 ```text
 6.16.8  FAIL
@@ -136,9 +139,9 @@ checker uses numeric major/minor/patch comparison:
 ```
 
 The 60 GiB GPU-visible pool threshold is a **hard requirement for the validated
-BF16 vLLM configuration**. The default GGUF itself needs materially less, but
-`00-check-env.sh` certifies the full reference host rather than only model-file
-fit.
+BF16 vLLM profile**. The default GGUF profile derives its hard floor from the
+recorded model artifact size and warns, rather than fails, below the project's
+validated memory envelope.
 
 Approximate BF16 planning math, preserved from the validated work:
 

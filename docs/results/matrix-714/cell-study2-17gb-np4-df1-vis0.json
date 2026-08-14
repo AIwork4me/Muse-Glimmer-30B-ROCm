@@ -1,0 +1,62 @@
+{
+  "study": "study2",
+  "weight": "17gb",
+  "dflash": true,
+  "vision": false,
+  "np": 4,
+  "metrics": {
+    "agg_tok_s": 32.42383535528847,
+    "total_tokens": 11476,
+    "wall_s": 354.37494148699625,
+    "ttft_p50": 0.8968681495025521,
+    "ttft_p90": 1.1591624317064997,
+    "tpot_median": 0.10394239507631171,
+    "agg_tok_s_min": 30.938982180833243,
+    "agg_tok_s_max": 33.63775058172986,
+    "reps": 5,
+    "finish_reason_dist": {
+      "length": 85,
+      "stop": 35
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 32616716,
+    "VmPeak_gib": 31.11,
+    "VmHWM_kib": 6436508,
+    "VmHWM_gib": 6.14,
+    "VmRSS_kib": 6436508,
+    "VmRSS_gib": 6.14,
+    "RssShmem_kib": 1262272,
+    "RssShmem_gib": 1.2,
+    "vram_used_mib": 1114.6,
+    "vram_total_mib": 32768.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 46854,
+    "draft_tokens": 251719,
+    "acceptance_rate": 0.18613612798398213,
+    "avg_accepted_per_step": 3.894140625
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": null,
+    "temp_c": 63.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 4 -c 32768 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 16",
+    "seed": 42,
+    "reps": 5,
+    "build": "0b1bad1",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon 8060S Graphics\", \"Card Model\": \"0x1586\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"STRXLGEN\", \"Subsystem ID\": \"-0x72ff\", \"Device Rev\": \"0xd1\", \"Node ID\": \"1\", \"GUID\": \"21984\", \"GFX Version\": \"gfx1151\"}}",
+    "kernel": "6.17.0-1032-oem",
+    "date": "2026-08-13"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 46854.0,
+    "draft_tokens": 251719.0,
+    "avg_accepted_per_step": 2.758551663232264,
+    "acceptance_rate": 0.18613612798398213
+  }
+}

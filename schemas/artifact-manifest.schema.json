@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AIwork4me/Muse-Glimmer-30B-ROCm/schemas/artifact-manifest.schema.json",
+  "title": "Model artifact provenance manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "hash_algorithm", "sets"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "hash_algorithm": {"const": "sha256"},
+    "sets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bf16", "gguf"],
+      "properties": {
+        "bf16": {"$ref": "#/$defs/artifactSet"},
+        "gguf": {"$ref": "#/$defs/artifactSet"}
+      }
+    }
+  },
+  "$defs": {
+    "artifactSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision", "validated_benchmark_use", "files"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "validated_benchmark_use": {"type": "string", "minLength": 1},
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/artifact"}
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size_bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}
