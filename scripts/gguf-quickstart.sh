@@ -28,20 +28,33 @@ source "$HERE/scripts/lib/llama_build.sh"
 # The probe needs python3; without it, fall through to the required-tools
 # guard below instead of misreading a missing interpreter as a busy port.
 PORT="${PORT:-8080}"
-if command -v python3 >/dev/null 2>&1 && ! python3 - "$PORT" <<'PY_PORT'
+port_probe_rc=0
+if command -v python3 >/dev/null 2>&1; then
+    python3 - "$PORT" <<'PY_PORT' || port_probe_rc=$?
 import socket
 import sys
+
+try:
+    port = int(sys.argv[1])
+except ValueError:
+    # Review minor: a non-numeric PORT cannot be "in use"; exit with its own
+    # code so the shell side can report the value instead of a busy port.
+    sys.exit(2)
 sock = socket.socket()
 try:
-    sock.bind(("127.0.0.1", int(sys.argv[1])))
+    sock.bind(("127.0.0.1", port))
 except OSError:
-    # F-11: exit cleanly so the outer `if !` prints the actionable ERROR
+    # F-11: exit cleanly so the shell gate prints the actionable ERROR
     # line; an unhandled bind error used to leak a traceback right before it.
     sys.exit(1)
 finally:
     sock.close()
 PY_PORT
-then
+fi
+if [ "$port_probe_rc" -eq 2 ]; then
+    echo "ERROR: PORT=$PORT is not a usable port number; choose PORT=<free-port>." >&2
+    exit 1
+elif [ "$port_probe_rc" -ne 0 ]; then
     echo "ERROR: port $PORT is already in use; choose PORT=<free-port>." >&2
     exit 1
 fi

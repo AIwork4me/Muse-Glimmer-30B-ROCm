@@ -283,6 +283,34 @@ def test_busy_port_refuses_before_all_reuse_work_and_without_traceback(
     assert result.stdout == "", "F-16: gate must precede the plan header and all reuse work"
 
 
+def test_non_numeric_port_refuses_cleanly_with_a_truthful_message(
+    tmp_path: Path,
+) -> None:
+    """Review minor: a garbage PORT raised ValueError inside the probe -
+    traceback leaked, then the gate misreported the port as "already in use"
+    (live-verified). It must refuse cleanly and call the value what it is."""
+    env = os.environ.copy()
+    env["HOME"] = str(tmp_path / "home")
+    (tmp_path / "home").mkdir(exist_ok=True)
+    incomplete = tmp_path / "prefix-rocm"
+    incomplete.mkdir()
+    env["ROCM_PREFIX"] = str(incomplete)
+    env.pop("ROCM_PATH", None)
+    env["PORT"] = "abc"
+
+    result = run_script(SCRIPT, env=env)
+
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "ValueError" not in result.stderr
+    assert "not a usable port number" in result.stderr
+    assert "already in use" not in result.stderr, (
+        "a garbage PORT is not busy; the old message was a lie"
+    )
+    assert "is incomplete" not in result.stderr, "gate must stay first"
+    assert result.stdout == "", "gate must stay before the plan header"
+
+
 def test_port_gate_precedes_resolver_tools_and_plan_header() -> None:
     src = SCRIPT.read_text(encoding="utf-8")
     gate_at = src.index("PY_PORT")
