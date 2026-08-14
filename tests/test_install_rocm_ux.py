@@ -258,3 +258,49 @@ def test_script_version_tail_is_not_a_pipe() -> None:
         "the cosmetic version tail must not pipe hipcc into head (F-01 SIGPIPE)"
     )
     assert '<<<"$("$PREFIX/bin/hipcc" --version)"' in src
+
+
+# ---------------------------------------------------------------------------
+# F-02: the verified archive must not silently stay behind in /tmp
+# ---------------------------------------------------------------------------
+
+GENEROUS_DF_KB = 200 * 1024 * 1024  # 200 GiB reported free, host-independent
+
+
+@needs_real_preflight_space
+def test_verified_archive_deleted_with_a_cleanup_line_after_success(
+    tmp_path: Path,
+) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    tarball = make_tarball(tmp_path)
+    install_fake_curl(bindir, tarball)
+    manifest = write_manifest(tmp_path, tarball)
+    archive = tmp_path / "archive.tar.gz"
+
+    result = run_installer(tmp_path, manifest=manifest, archive=archive)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not archive.exists(), "verified archive must be removed on success"
+    assert str(archive) in result.stdout
+    assert "cleaned up archive" in result.stdout.lower()
+
+
+def test_failed_verification_keeps_the_archive_for_inspection(
+    tmp_path: Path,
+) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    install_fake_df(bindir, {}, GENEROUS_DF_KB)  # keep the preflight out of it
+    tarball = make_tarball(tmp_path)
+    install_fake_curl(bindir, tarball)
+    # Right size, wrong bytes: size check passes, SHA256 must fail.
+    manifest = write_manifest(tmp_path, tarball, sha256="0" * 64)
+    archive = tmp_path / "archive.tar.gz"
+
+    result = run_installer(tmp_path, manifest=manifest, archive=archive)
+
+    assert result.returncode != 0
+    assert archive.exists(), (
+        "failure paths must keep the archive so it can be inspected/retried"
+    )

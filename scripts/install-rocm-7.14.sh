@@ -60,6 +60,13 @@ tar -xf "$ARCHIVE" -C "$STAGE"
 mv "$STAGE" "$PREFIX"
 trap - EXIT
 
+# F-02: the verified tarball is a transient download, not a cache - on the
+# default /tmp (often tmpfs on UMA hosts) leaving it behind silently pins
+# ~1.6 GiB of RAM-backed storage. Remove it once verification and extraction
+# succeeded; failure paths above keep it for inspection/retry.
+rm -f -- "$ARCHIVE"
+echo "Cleaned up archive $ARCHIVE (deleted after successful verification)."
+
 echo "Installed ROCm $ROCM_VER at $PREFIX. Activate in a shell with:"
 echo "  export PATH=\"$PREFIX/bin:\$PATH\""
 echo "  export LD_LIBRARY_PATH=\"$PREFIX/lib:\${LD_LIBRARY_PATH:-}\""
