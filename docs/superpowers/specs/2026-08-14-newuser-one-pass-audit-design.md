@@ -84,7 +84,7 @@ Workspace: `~/Desktop/muse-newuser/` (the clone lands at
 | P0 | Move `~/rocm-7.14.0` → `~/rocm-7.14.0.dev-backup`; create workspace; confirm no process holds the old ROCm | — |
 | P1 | Clone GitHub `master` → run the README 4-command sequence verbatim, cold | Per-step wall clock; quality of download/build/verify progress feedback; error actionability |
 | P2 | Same clone, run `quickstart.sh` (interactive confirm) | Wrapper UX; the "reuses matching assets on reruns" promise |
-| P3 | `WITH_DFLASH=1 bash scripts/gguf-quickstart.sh` at default c=1 (the README-warned c16 pathology is out of scope) | Drafter download; speculative-decoding args in effect |
+| P3 | `WITH_DFLASH=1 bash scripts/gguf-quickstart.sh`, verified with a single request (no `-np` flag; the README-warned c16 pathology is out of scope) | Drafter download; speculative-decoding args in effect |
 | P4 | `curl` the 8080 chat-completions endpoint until a completion returns; compare against the repo's own smoke definition | End-to-end success determination |
 | P5 | Handle the freshly installed ROCm dir (verify equivalence with backup, keep one); keep workspace logs as evidence | — |
 | P6 | Findings report: severity, root cause, evidence, fix proposal | Deliverable 1 |
