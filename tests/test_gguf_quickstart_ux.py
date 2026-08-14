@@ -566,3 +566,66 @@ def test_optional_features_stay_silent_without_the_flags(tmp_path: Path) -> None
     assert "mmproj" not in result.stdout, "no mmproj lines without WITH_MMPROJ=1"
     assert "spec decoding" not in result.stdout
     assert "speculative decoding" not in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# F-09: expected upstream "failed" noise framed at DFlash serve start
+# ---------------------------------------------------------------------------
+
+EXPECTED_NOISE_NOTE = (
+    'note: upstream "failed to initialize"/"failed to measure" lines '
+    "during DFlash memory fitting are expected; the definitive "
+    "confirmation is 'adding speculative implementation' below"
+)
+
+
+def test_dflash_serve_start_frames_expected_upstream_failure_lines(
+    tmp_path: Path,
+) -> None:
+    """F-09: upstream prints E/W "failed ..." lines during a fully
+    successful DFlash load (memory fitting), exactly in the window where
+    the user is checking whether DFlash engaged. One plain-English note
+    from the project's own tooling must frame them just before exec,
+    naming the definitive confirmation line to watch for."""
+    origin, pin = make_origin(tmp_path)
+    repo = make_skeleton(tmp_path)
+    env, _models, _build = skeleton_env(
+        tmp_path,
+        repo,
+        with_artifacts=True,
+        extra_artifacts=(DFLASH_FILE,),
+        origin=origin,
+        pin=pin,
+        df_default=("/fakedisk", 200 * KB_GIB),
+        extra={"WITH_DFLASH": "1"},
+    )
+
+    result = run_script(repo / "scripts/gguf-quickstart.sh", env=env, cwd=repo)
+
+    assert result.returncode == 127, result.stdout + result.stderr
+    assert EXPECTED_NOISE_NOTE in result.stdout, (
+        "F-09: the expected-noise note must print around the serve start"
+    )
+    spec_at = result.stdout.index("speculative decoding: draft-dflash")
+    assert spec_at < result.stdout.index(EXPECTED_NOISE_NOTE), (
+        "the note frames what the user is about to see; it belongs after the"
+        " spec-args line, immediately before exec"
+    )
+
+
+def test_no_expected_noise_note_without_dflash(tmp_path: Path) -> None:
+    origin, pin = make_origin(tmp_path)
+    repo = make_skeleton(tmp_path)
+    env, _models, _build = skeleton_env(
+        tmp_path,
+        repo,
+        with_artifacts=True,
+        origin=origin,
+        pin=pin,
+        df_default=("/fakedisk", 200 * KB_GIB),
+    )
+
+    result = run_script(repo / "scripts/gguf-quickstart.sh", env=env, cwd=repo)
+
+    assert result.returncode == 127, result.stdout + result.stderr
+    assert "DFlash memory fitting" not in result.stdout

@@ -349,5 +349,10 @@ if [ "${WITH_DFLASH:-0}" = "1" ]; then
     # see (the server never echoes its argv); state the effective
     # speculative arguments on one line.
     echo "speculative decoding: draft-dflash (draft: $DEST/$DFLASH_FILE, n-max $SPEC_DRAFT_N_MAX)"
+    # F-09: upstream prints E/W "failed ..." lines while fitting DFlash
+    # memory even on a fully successful load, exactly where the user is
+    # checking whether DFlash engaged; they cannot be silenced without
+    # touching llama.cpp, so frame them just before they appear.
+    echo "note: upstream \"failed to initialize\"/\"failed to measure\" lines during DFlash memory fitting are expected; the definitive confirmation is 'adding speculative implementation' below"
 fi
 exec "$BUILD_DIR/bin/llama-server" "${SERVER_ARGS[@]}"     -ngl 999 -c 32768 --port "$PORT" --jinja
