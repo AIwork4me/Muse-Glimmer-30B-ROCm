@@ -136,7 +136,7 @@ case "$PROFILE" in
             7.2.*)
                 warn "using the historical ROCm $rocm_ver fallback; ROCm 7.14 is recommended."
                 ;;
-            *) fail "GGUF profile expects ROCm 7.14.x or historical 7.2.x; got '$rocm_ver'" ;;
+            *) fail "GGUF profile expects ROCm 7.14.x (recommended) or historical 7.2.x; got '$rocm_ver'. Run scripts/install-rocm-7.14.sh to install 7.14, or set ROCM_PREFIX to an existing 7.14.x/7.2.x prefix." ;;
         esac
         ;;
     vllm|reference)
@@ -161,7 +161,12 @@ fi
 # Buffer rocminfo output. A live rocminfo piped to grep -q can receive SIGPIPE
 # under pipefail, so parsing always uses the complete captured output.
 rocminfo_out="$("$ROCM_PREFIX/bin/rocminfo" 2>/dev/null || true)"
-grep -q "gfx1151" <<<"$rocminfo_out" || fail "gfx1151 not found in $ROCM_PREFIX/bin/rocminfo"
+if ! grep -q "gfx1151" <<<"$rocminfo_out"; then
+    # F-15: name what the host actually reported, and where non-gfx1151
+    # users should look, instead of a bare "not found".
+    observed_gpus="$( { grep -oE 'gfx[0-9]+' <<<"$rocminfo_out" || true; } | sort -u | paste -sd' ' -)"
+    fail "gfx1151 not found in $ROCM_PREFIX/bin/rocminfo output; observed GPU id(s): ${observed_gpus:-none}. This project is validated on gfx1151 (AMD Strix Halo) only — see docs/hardware-validation.md for non-gfx1151 platforms."
+fi
 
 # First coarse-grained global pool belonging to the gfx1151 agent.
 vram_kb="$(awk '
@@ -184,7 +189,7 @@ fi
 if [ "$PROFILE" = "gguf" ]; then
     min_gguf_kib=$(( (GGUF_MODEL_BYTES + 1023) / 1024 ))
     if [ "$vram_kb" -lt "$min_gguf_kib" ]; then
-        fail "GPU-visible pool is smaller than the $GGUF_MODEL_BYTES-byte default GGUF; full GPU offload cannot fit the weights."
+        fail "GPU-visible pool is ${pool_gib} GiB, but the default GGUF needs >= ${GGUF_FLOOR_GIB} GiB GPU-visible to fit; select a smaller quant with GGUF_FILE=<path> (see scripts/gguf-quickstart.sh) or increase GPU-visible memory in the BIOS."
     fi
     reference_visible_kib=$(( GGUF_REFERENCE_VISIBLE_GIB * 1024 * 1024 ))
     if [ "$vram_kb" -lt "$reference_visible_kib" ]; then

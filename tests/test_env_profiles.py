@@ -19,7 +19,7 @@ SYSTEM_BASH = shutil.which("bash")
 GGUF_HOST_TOOLS = ("git", "cmake", "curl", "python3")
 
 
-def make_rocm(prefix: Path, version: str, pool_gib: int) -> None:
+def make_rocm(prefix: Path, version: str, pool_gib: int, gpu: str = "gfx1151") -> None:
     (prefix / "bin").mkdir(parents=True)
     (prefix / ".info").mkdir()
     (prefix / ".info/version").write_text(version + "\n", encoding="utf-8")
@@ -30,7 +30,7 @@ def make_rocm(prefix: Path, version: str, pool_gib: int) -> None:
     rocminfo.write_text(
         "#!/usr/bin/env bash\n"
         "cat <<'EOF'\n"
-        "  Name:                    gfx1151\n"
+        f"  Name:                    {gpu}\n"
         "      Segment:                 GLOBAL; FLAGS: COARSE GRAINED\n"
         f"      Size:                    {pool_gib * 1024 * 1024}(0x0) KB\n"
         "EOF\n",
@@ -65,9 +65,10 @@ def run_checker(
     pool_gib: int = 80,
     uv_exit: int = 97,
     path: str | None = None,
+    gpu: str = "gfx1151",
 ) -> subprocess.CompletedProcess[str]:
     prefix = tmp_path / "rocm"
-    make_rocm(prefix, version, pool_gib)
+    make_rocm(prefix, version, pool_gib, gpu)
     tools = make_tools(tmp_path / "tools", uv_exit=uv_exit)
     env = os.environ.copy()
     env["HOME"] = str(tmp_path / "home")
@@ -124,7 +125,11 @@ def test_gguf_fails_when_pool_is_smaller_than_default_artifact(tmp_path: Path) -
     result = run_checker(tmp_path, profile="gguf", pool_gib=15)
 
     assert result.returncode != 0
-    assert "smaller than the 16756681056-byte default GGUF" in result.stderr
+    assert "15 GiB" in result.stderr, "must state the available GPU-visible pool"
+    assert f"{default_gguf_floor_gib()} GiB" in result.stderr, (
+        "must state the required GPU-visible floor in the same units"
+    )
+    assert "GGUF_FILE" in result.stderr, "must hint the smaller-quant escape hatch"
 
 
 def test_vllm_profile_passes_at_reference_floor(tmp_path: Path) -> None:
@@ -303,4 +308,38 @@ def test_vllm_pool_line_states_profile_floor(tmp_path: Path) -> None:
     assert line.startswith("GPU-visible pool: 80 GiB")
     assert ">= 60 GiB GPU-visible" in line, (
         "the non-gguf passing line must carry the profile's 60 GiB floor"
+    )
+
+
+# ---------------------------------------------------------------------------
+# F-15: failure exits must state expected-vs-got and one next action
+# ---------------------------------------------------------------------------
+
+
+def test_rocm_version_mismatch_prints_expected_got_and_next_action(
+    tmp_path: Path,
+) -> None:
+    result = run_checker(tmp_path, profile="gguf", version="6.4.0")
+
+    assert result.returncode != 0
+    assert "7.14" in result.stderr and "7.2" in result.stderr, (
+        "must state the expected ROCm versions"
+    )
+    assert "got '6.4.0'" in result.stderr, "must state the observed version"
+    assert "scripts/install-rocm-7.14.sh" in result.stderr, (
+        "must point at the installer as the next action"
+    )
+    assert "ROCM_PREFIX" in result.stderr, "must name the ROCM_PREFIX escape hatch"
+
+
+def test_gfx1151_absent_lists_observed_gpu_ids_and_doc_pointer(
+    tmp_path: Path,
+) -> None:
+    result = run_checker(tmp_path, profile="gguf", gpu="gfx1100")
+
+    assert result.returncode != 0
+    assert "gfx1151 not found" in result.stderr
+    assert "gfx1100" in result.stderr, "must list the observed GPU id(s)"
+    assert "docs/hardware-validation.md" in result.stderr, (
+        "must point non-gfx1151 platforms at the hardware validation doc"
     )
