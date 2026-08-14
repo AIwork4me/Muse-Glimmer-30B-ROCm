@@ -12,6 +12,9 @@ F-13 - per-distro host-tool one-liners must exist in README and match the
 wording the scripts print on ``required command not found``.
 F-17/F-10 - ``MODEL_DEST`` and the optional-asset sizes must be documented
 next to the other env knobs / download sizes.
+Fold-ins - the dirty-checkout entry's mid-switch recovery, the corrected
+``--spec-draft-n-max 15`` in adaptation.md, and the hardware-validation
+BIOS/UMA sizing pointer.
 """
 from pathlib import Path
 
@@ -94,3 +97,28 @@ def test_optional_features_size_their_extra_downloads() -> None:
     assert "1.3 GiB" in readme
     assert "WITH_DFLASH=1" in readme
     assert "WITH_MMPROJ=1" in readme
+
+
+def test_troubleshooting_dirty_checkout_covers_mid_switch_interruption() -> None:
+    doc = _src("docs/troubleshooting.md")
+    entry = doc.split("## dirty-llama-cpp-checkout", 1)[1].split("\n## ", 1)[0]
+    # Fix-A fold: an interrupted commit switch may need more than
+    # `checkout -- .`; the reset/remove alternatives must be documented.
+    assert "reset --hard" in entry
+    assert "rm -rf third_party/llama.cpp" in entry
+
+
+def test_adaptation_states_the_real_dflash_cap() -> None:
+    doc = _src("docs/adaptation.md")
+    assert "--spec-draft-n-max 15" in doc
+    assert "--spec-draft-n-max 16" not in doc
+
+
+def test_hardware_validation_has_bios_uma_sizing_pointer() -> None:
+    doc = _src("docs/hardware-validation.md")
+    # F-14 fold: hosts below the 80 GiB envelope need the checker thresholds
+    # and the README requirements, not silence.
+    assert "80 GiB" in doc
+    assert "00-check-env.sh" in doc
+    assert "README.md#requirements-and-operating-notes" in doc
+    assert "warning envelope" in doc

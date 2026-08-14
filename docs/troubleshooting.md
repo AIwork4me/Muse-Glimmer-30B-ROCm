@@ -192,6 +192,18 @@ git -C third_party/llama.cpp checkout -- .
 bash scripts/gguf-quickstart.sh
 ```
 
+If the checkout was interrupted mid-switch (e.g. Ctrl-C while the script was
+changing commits) and `checkout -- .` does not settle the tree, force the
+selected ref — the `llama.cpp ref :` line the script prints — or, when there
+is nothing to keep in the checkout, remove it and let the script re-clone:
+
+```bash
+git -C third_party/llama.cpp reset --hard <pinned-ref>
+bash scripts/gguf-quickstart.sh
+# ...or, with nothing to keep in the checkout:
+rm -rf third_party/llama.cpp && bash scripts/gguf-quickstart.sh
+```
+
 The refusal itself prints the same `git status --porcelain` excerpt (first 10
 lines) and these recovery commands, so you normally do not need this page.
 
