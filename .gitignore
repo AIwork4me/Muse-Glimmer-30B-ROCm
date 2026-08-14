@@ -12,3 +12,5 @@ docs/results/.matrix-721-baseline-snapshot/
 /models
 scripts/w7900-repro/_out/
 scripts/w7900-repro/logs/
+scripts/w7900-repro/bin/llama-server
+scripts/w7900-repro/bin/llama-*

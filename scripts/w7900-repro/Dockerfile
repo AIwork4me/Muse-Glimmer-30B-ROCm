@@ -1,26 +1,31 @@
-# Method 1 (image) — reproduction runtime image.
+# Method 1 (image) — W7900 reproduction runtime image.
 #
-# BASE = a prebuilt Muse-Glimmer-30B llama.cpp image that ships gfx1100
-# `llama-server` binaries at /llamacpp_workspace/bin (built from llama.cpp
-# source >= b10353, which added the muse-glimmer arch + DFlash). This thin
-# layer bakes the one benchmark-client dependency (aiohttp) and pins model
-# downloads to the OFFICIAL Hugging Face (drops any internal proxy the base
-# image may carry). Network access to huggingface.co is the user's responsibility.
+# Built like ../../deploy/Dockerfile, but from the TRUE base
+# (flagos/flagtree-amd-tle:rocm7.2.4) and pinned to the OFFICIAL Hugging Face
+# (the deploy image's internal download proxy is dropped). No server entrypoint:
+# the container just stays alive; the benchmark harness starts llama-server itself.
+#
+# The gfx1100 llama.cpp binary is a CUSTOM build (muse-glimmer arch + DFlash) —
+# not upstream ggml-org/llama.cpp — so it is COPYd in rather than compiled here.
+# Stage it into ./bin first (see bin/README.md), then:
 #
 #   docker build -t muse-glimmer-llamacpp:repro .
-#   IMAGE=muse-glimmer-llamacpp:repro bash run_all.sh
-#
-# You may also skip this build and use the base image directly (the driver will
-# pip-install aiohttp on first run):
-#   IMAGE=<BASE_IMAGE below> bash run_all.sh
-ARG BASE_IMAGE=crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:muse-glimmer-llamacpp_2026_08_14_modelscope_concurrent
-FROM ${BASE_IMAGE}
+#   bash run_all.sh            # IMAGE defaults to muse-glimmer-llamacpp:repro
+FROM flagos/flagtree-amd-tle:rocm7.2.4
 
-# Official Hugging Face only — drop any internal proxy baked into the base image.
-ENV HF_ENDPOINT=https://huggingface.co \
-    HF_HUB_ENABLE_HF_TRANSFER=0
+ENV PATH=/opt/rocm/bin:${PATH} \
+    HF_ENDPOINT=https://huggingface.co \
+    HF_HUB_ENABLE_HF_TRANSFER=0 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    MODELS_DIR=/llamacpp_workspace/models
 
-# Bake the single benchmark-client dependency so the container is self-sufficient.
-RUN python3 -m pip install --no-cache-dir aiohttp || pip install --no-cache-dir aiohttp
+# HF downloader (00_prepare uses huggingface_hub) + the one benchmark-client dep (aiohttp).
+RUN python3 -m pip install --no-input --no-cache-dir "huggingface_hub[hf_xet]" aiohttp
 
+WORKDIR /llamacpp_workspace
+# Prebuilt gfx1100 llama.cpp server (custom muse-glimmer + DFlash build); staged into ./bin.
+COPY bin/llama-server /llamacpp_workspace/bin/llama-server
+RUN chmod +x /llamacpp_workspace/bin/*
+
+EXPOSE 8080
 CMD ["sleep", "infinity"]

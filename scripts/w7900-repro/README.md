@@ -41,13 +41,19 @@ bash 00_prepare.sh        # download 4 GGUFs from the OFFICIAL HF -> <repo>/mode
 
 ## Method 1 · image (Docker)
 
-```bash
-# (optional) build a thin repro image: base image + aiohttp + pinned official HF
-docker build -t muse-glimmer-llamacpp:repro .
-export IMAGE=muse-glimmer-llamacpp:repro
-#   —— or just point IMAGE at an existing base image (driver pip-installs aiohttp on first run)
+The image is built **from the true base** `flagos/flagtree-amd-tle:rocm7.2.4`
+(same base as [`../../deploy/Dockerfile`](../../deploy/Dockerfile)), pinned to the
+official Hugging Face. It copies a prebuilt gfx1100 `llama-server` from `bin/` —
+stage it there first (see [`bin/README.md`](bin/README.md)); it is a custom
+muse-glimmer + DFlash build, not upstream `ggml-org/llama.cpp`, so it is not
+compiled here.
 
-nohup bash run_all.sh > run_all.out 2>&1 &     # isolated container -> 12 cells (~2-3 h)
+```bash
+cp /path/to/deploy/bin/llama-server bin/        # stage the gfx1100 binary (see bin/README.md)
+docker build -t muse-glimmer-llamacpp:repro .   # FROM flagos/flagtree-amd-tle:rocm7.2.4
+
+nohup bash run_all.sh > run_all.out 2>&1 &      # isolated container -> 12 cells (~2-3 h)
+#   IMAGE defaults to muse-glimmer-llamacpp:repro; override to reuse another image.
 ```
 
 ## Method 2 · bare metal (python/shell)
@@ -68,7 +74,8 @@ LLAMA_BIN_HOST=/path/to/llama.cpp/build/bin/llama-server \
 | File | Role |
 |---|---|
 | `config.env` | shared config (image / host binary / paths / sizes); all env-overridable |
-| `Dockerfile` | Method-1 image: base image + `aiohttp` + pinned official HF |
+| `Dockerfile` | Method-1 image: `FROM flagos/flagtree-amd-tle:rocm7.2.4` + prebuilt gfx1100 `llama-server` (`bin/`) + `aiohttp`, official HF |
+| `bin/README.md` | how to stage the prebuilt `llama-server` for the image build |
 | `00_prepare.sh` | download 4 GGUFs from official HF + verify (shared) |
 | `run_all.sh` | Method 1: start isolated container → run `_repro_driver.sh` |
 | `run_host.sh` | Method 2: run `_repro_driver.sh` directly on the host |

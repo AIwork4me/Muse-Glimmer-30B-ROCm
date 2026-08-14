@@ -11,8 +11,8 @@ repository records the engineering delta required for RDNA, validates it on real
 hardware, preserves raw results and failures, and makes the same protocol
 available to Radeon contributors.
 
-**Actually validated here:** AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S,
-`gfx1151` (RDNA 3.5). Radeon dGPUs are planned, not claimed as validated.
+**Actually validated here:** AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S
+(`gfx1151`, RDNA 3.5) and Radeon PRO W7900 (`gfx1100`, RDNA 3).
 
 The working method is:
 
@@ -57,8 +57,9 @@ validated BF16 configuration.
 
 ## Headline validated results
 
-All figures below are historical evidence from the preserved ROCm 7.2.1
-reference stack on `gfx1151`; they are not ROCm 7.14 or Radeon dGPU claims.
+The `gfx1151` figures below are historical evidence from the preserved ROCm
+7.2.1 reference stack; the `gfx1100` (W7900) rows in Study 2 are the Radeon
+dGPU validation. Neither set is a ROCm 7.14 claim.
 
 ### Study 1 — Meta-aligned DFlash anchor
 
@@ -83,6 +84,18 @@ that GPU test is run and recorded.
 | dynamic | 9.09 / 19.89 tok/s | 20.90 / 28.22 tok/s | 31.05 tok/s |
 
 This is an original concurrency study, not a Meta-aligned comparison anchor.
+
+**Radeon PRO W7900 (`gfx1100`, RDNA 3, 48 GiB)** — the same study on a desktop
+GPU, extended to `c=32` (DFlash reported at `c≤4`, where it helps):
+
+| Weight | c=1 baseline / DFlash | c=4 baseline / DFlash | c=16 baseline | c=32 baseline |
+|---|---:|---:|---:|---:|
+| 17GB | 33.72 / 56.35 tok/s | 66.46 / 77.44 tok/s | 218.56 tok/s | 293.29 tok/s |
+| dynamic | 30.61 / 51.92 tok/s | 65.63 / 71.51 tok/s | 209.65 tok/s | 265.71 tok/s |
+
+W7900 runs ~3.2–3.4× the gfx1151 APU at `c=1` and up to ~6.8× at `c=16`
+(dedicated GDDR6 vs unified LPDDR5X); peak VRAM ≤ 24.9 GiB of 48. Full detail +
+reproduction: [W7900 results](docs/results/w7900-gfx1100.md), [`scripts/w7900-repro/`](scripts/w7900-repro/).
 
 ### Study 3 — original multimodal validation
 
