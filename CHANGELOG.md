@@ -5,7 +5,7 @@ The v0.1.0 entry was dated after its initial local and hosted release-candidate
 gates passed. Tags and GitHub Releases are created only after final maintainer
 approval.
 
-## Unreleased
+## [0.1.1] - 2026-08-15
 
 ### Added
 
