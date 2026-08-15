@@ -22,7 +22,7 @@
       {
         "name": "GGUF/llama.cpp",
         "status": "project-validated",
-        "scope": "17 of 21 planned cells; four np=16 cells deferred",
+        "scope": "19 of 21 planned cells; both np=16 baselines measured 2026-08-15 with the fixed SSE-framing client; 2 np=16 DFlash cells deferred",
         "evidence": "docs/results/matrix-714/"
       },
       {

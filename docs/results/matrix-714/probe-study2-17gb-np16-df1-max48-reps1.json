@@ -1,0 +1,62 @@
+{
+  "study": "study2",
+  "weight": "17gb",
+  "dflash": true,
+  "vision": false,
+  "np": 16,
+  "metrics": {
+    "agg_tok_s": 16.90345915215886,
+    "total_tokens": 3109,
+    "wall_s": 183.92685023898957,
+    "ttft_p50": 2.755559965997236,
+    "ttft_p90": 4.978903175477171,
+    "tpot_median": 0.4139227554043557,
+    "agg_tok_s_min": 16.90345915215886,
+    "agg_tok_s_max": 16.90345915215886,
+    "reps": 1,
+    "finish_reason_dist": {
+      "stop": 35,
+      "length": 61
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 33819056,
+    "VmPeak_gib": 32.25,
+    "VmHWM_kib": 4128020,
+    "VmHWM_gib": 3.94,
+    "VmRSS_kib": 4128020,
+    "VmRSS_gib": 3.94,
+    "RssShmem_kib": 1573932,
+    "RssShmem_gib": 1.5,
+    "vram_used_mib": 860.4,
+    "vram_total_mib": 32768.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 3002,
+    "draft_tokens": 15560,
+    "acceptance_rate": 0.1929305912596401,
+    "avg_accepted_per_step": 4.563645833333333
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": null,
+    "temp_c": 64.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 16 -c 131072 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 15",
+    "seed": 42,
+    "reps": 1,
+    "build": "0b1bad1",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon 8060S Graphics\", \"Card Model\": \"0x1586\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"STRXLGEN\", \"Subsystem ID\": \"-0x72ff\", \"Device Rev\": \"0xd1\", \"Node ID\": \"1\", \"GUID\": \"21984\", \"GFX Version\": \"gfx1151\"}}",
+    "kernel": "6.17.0-1032-oem",
+    "date": "2026-08-15"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 3002.0,
+    "draft_tokens": 15560.0,
+    "avg_accepted_per_step": 2.356357927786499,
+    "acceptance_rate": 0.1929305912596401
+  }
+}

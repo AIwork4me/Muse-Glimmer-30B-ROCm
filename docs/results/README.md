@@ -11,12 +11,14 @@ optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM validation
 pending.** Current proxy results did not justify prioritizing that rebuild; this
 is not a global ROCm 7.14 validation or permanent vLLM value claim.
 
-The 17-cell run used AMD's official gfx1151 ROCm 7.14.0 tarball on Ryzen AI
+The 19-cell run used AMD's official gfx1151 ROCm 7.14.0 tarball on Ryzen AI
 MAX+ PRO 395 / Radeon 8060S. AMD's [ROCm 7.14 release notes](https://rocm.docs.amd.com/en/docs-7.14.0/about/release-notes.html)
 list that platform as `gfx1151`. Muse-Glimmer workload behavior, performance,
 DFlash, and vision evidence here are independent project results, not AMD
 workload-support claims. Mean TPOT deltas were −0.4% at `np=1` and −1.7% at `np=4`; all 17 cells
-had a lower VmPeak mapped-address-space envelope (mean −2.8%). DFlash acceptance
+of the original pass had a lower VmPeak mapped-address-space envelope (mean
+−2.8%; of the `np=16` baselines added later, 17gb is +16.1% and dynamic
+−1.6% — see the scoped result). DFlash acceptance
 rates were similar, with the largest observed difference 1.21 percentage
 points. No incident was observed during the six-hour run, but raw system logs
 were not retained, so this is not a standalone stability qualification.

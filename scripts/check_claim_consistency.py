@@ -139,6 +139,21 @@ def validate_forward_tracks(
                     f"{track['name']}: project-validated track requires evidence")
         if evidence is not None:
             resolve_evidence_path(evidence, root)
+    gguf = tracks.get("GGUF/llama.cpp")
+    manifest_path = root / "configs/rocm-7.14-gguf-validation.json"
+    if gguf is not None and manifest_path.is_file():
+        # Scope-string gate for the real repo tree only; synthetic/future
+        # track sets (see test_future_forward_track_needs_no_checker...) are
+        # exempt so adding tracks never requires checker changes.
+        gguf_scope = gguf["scope"]
+        scope = json.loads(manifest_path.read_text(encoding="utf-8"))["scope"]
+        deferred = len(scope["deferred_cells"])
+        require(gguf_scope.startswith(
+                    f"{scope['completed_cells']} of {scope['planned_cells']} "
+                    f"planned cells"),
+                "GGUF track scope disagrees with the validation manifest cell count")
+        require(f"{deferred} np=16 DFlash cells deferred" in gguf_scope,
+                "GGUF track scope disagrees with the deferred-cell count")
     return tracks
 
 
@@ -165,19 +180,23 @@ def validation_tracks(claims: dict, forward_manifest: dict) -> str:
     forward = claims["forward_validation"]
     scope = forward_manifest["scope"]
     platform = forward_manifest["platform"]
+    deferred = len(scope["deferred_cells"])
     return (
         f"- **ROCm {forward['rocm'][:4]} gfx1151 (recommended default):** the reduced "
         "**GGUF/llama.cpp\n"
         f"  matrix is project-validated** on {platform['hardware'].removeprefix('AMD ')},\n"
-        f"  {scope['completed_cells']} of {scope['planned_cells']} planned cells; the "
-        "four `np=16` cells\n"
-        "  were deferred. **Optional / not prioritized for v0.1; ROCm 7.14 "
-        "Muse-Glimmer vLLM\n"
-        "  validation pending.** Current rocBLAS BF16-GEMM proxy results did not "
-        "justify prioritizing\n"
-        "  a 7.14 rebuild; vLLM/BF16 stays validated on the 7.2.1 reference, so "
-        "ROCm 7.14 is not\n"
-        "  presented as a globally validated replacement for the historical stack.\n"
+        f"  {scope['completed_cells']} of {scope['planned_cells']} planned cells; of the "
+        f"four `np=16` cells, both\n"
+        f"  baselines were measured 2026-08-15 (healthy, fixed SSE-framing "
+        f"client) and the\n"
+        f"  {deferred} DFlash cells remain deferred (pathological scope). **Optional / not "
+        "prioritized for v0.1; ROCm 7.14\n"
+        "  Muse-Glimmer vLLM validation pending.** Current rocBLAS BF16-GEMM proxy "
+        "results did not\n"
+        "  justify prioritizing a 7.14 rebuild; vLLM/BF16 stays validated on the "
+        "7.2.1 reference, so\n"
+        "  ROCm 7.14 is not presented as a globally validated replacement for the "
+        "historical stack.\n"
         f"- **ROCm {reference['rocm']} (historical reference, supplementary):** the "
         "full validated stack —\n"
         "  the complete benchmark matrix, the vLLM-vs-llama.cpp head-to-head, and "
@@ -191,22 +210,27 @@ def expected_tpot_claim() -> tuple[str, str]:
     before = load_matrix(str(ROOT / "docs/results/matrix"))
     after = load_matrix(str(ROOT / "docs/results/matrix-714"))
     grouped = tpot_deltas_by_concurrency(before, after)
-    require(set(grouped) == {1, 4}, "unexpected TPOT concurrency groups")
+    # np=1/np=4 groups come from the original 17-cell pass; the np=16 group
+    # holds the two baseline pairs (17gb, dynamic) added 2026-08-15.
+    require(set(grouped) == {1, 4, 16}, "unexpected TPOT concurrency groups")
 
     def pct(value: float) -> str:
         return f"{value:+.1f}%"
 
     np1 = grouped[1]
     np4 = grouped[4]
+    np16 = grouped[16]
     full = (
         f"Mean TPOT delta versus 7.2.1 was {pct(mean(np1))} at np=1 and "
         f"{pct(mean(np4))} at np=4; individual cells ranged from "
         f"{pct(min(np1))} to {pct(max(np1))} and "
-        f"{pct(min(np4))} to {pct(max(np4))}, respectively"
+        f"{pct(min(np4))} to {pct(max(np4))}, respectively. The comparable "
+        f"np=16 baseline pairs averaged {pct(mean(np16))}"
     )
     compact = (
         f"mean TPOT delta was {pct(mean(np1))} at np=1 and "
-        f"{pct(mean(np4))} at np=4, while individual cells varied more"
+        f"{pct(mean(np4))} at np=4 (np=16 baseline pairs {pct(mean(np16))}), "
+        f"while individual cells varied more"
     )
     return full, compact
 

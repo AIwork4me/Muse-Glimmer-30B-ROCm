@@ -359,7 +359,9 @@ validated GPU stack.
 5. **`power_w` is null** — the APU does not expose the relevant rocm-smi key;
    `temp_c` is captured (58–63 °C, no throttling).
 6. **This directory remains ROCm 7.2.1 evidence.** ROCm 7.14.0 has a separate,
-   scoped 17-cell GGUF matrix; all four `np=16` GGUF cells remain deferred.
+   scoped 19-cell GGUF matrix; of the four `np=16` GGUF cells both baselines
+   were measured on 2026-08-15 (with the corrected SSE-framing client) and the
+   two DFlash cells remain deferred.
    ROCm 7.14 Muse-Glimmer vLLM validation is optional / not prioritized for v0.1
    and pending. See [`rocm-7.14/README.md`](rocm-7.14/README.md).
 7. **`llama-bench` cross-check is non-DFlash.** `llama-bench` has no `-md`
@@ -401,7 +403,9 @@ cell JSON is the authoritative record; the rendered tables in `matrix.md` and
 The Part 2 comparison uses the same recorded llama.cpp commit, flags, model
 artifacts, prompt set and seeds; the intended experimental variable is the ROCm
 runtime ([rocm-7.14/README.md](rocm-7.14/README.md)). The 7.14 arm is scoped to
-17 of 21 planned cells.
+19 of 21 planned cells (17 from the 2026-08-13 pass plus both `np=16`
+baselines measured 2026-08-15 with the fixed SSE-framing client; the two
+`np=16` DFlash cells stay deferred).
 
 **The aggregate-throughput trap.** `aggregate tok/s = Σ generated tokens ÷ max
 per-request wall` (§4). The Study 1 records have equal total token counts and

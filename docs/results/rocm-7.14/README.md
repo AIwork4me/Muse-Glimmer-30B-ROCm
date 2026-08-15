@@ -11,9 +11,12 @@ pending.** Historical vLLM/BF16 remains validated on the 7.2.1 reference.
 Current rocBLAS BF16-GEMM proxy results did not justify prioritizing a 7.14
 rebuild; they do not establish zero value for a future cohesive 7.14 stack.
 
-The historical ROCm 7.2.1 evidence remains in `../matrix/`. The 17 ROCm 7.14
-cells remain in `../matrix-714/`; all four `np=16` cells were intentionally
-deferred. The [scoped validation manifest](../../../configs/rocm-7.14-gguf-validation.json)
+The historical ROCm 7.2.1 evidence remains in `../matrix/`. The 19 ROCm 7.14
+cells remain in `../matrix-714/`; of the four `np=16` cells, **both baselines
+were measured on 2026-08-15 with the corrected SSE-framing benchmark client**
+(see [`#c16`](#c16--both-baselines-measured-2026-08-15-dflash-cells-stay-deferred)),
+while the two DFlash cells remain deferred (pathological scope). The
+[scoped validation manifest](../../../configs/rocm-7.14-gguf-validation.json)
 records the archive, runtime, engine, model and evidence identities.
 
 ## Result summary — GGUF matrix (2026-08-13)
@@ -23,9 +26,10 @@ set and seeds; the intended experimental variable is the ROCm runtime. Mean TPOT
 deltas were −0.4% at `np=1` and −1.7% at `np=4`. Those cell-level means are
 descriptive and do not establish a general equivalence bound or speedup.
 
-All 17 ROCm 7.14 cells had a lower VmPeak mapped-address-space envelope (mean
-−2.8%). The operator observed no system incident during the six-hour run, but
-raw dmesg/amdgpu logs were not retained. This result is therefore not a
+All 17 ROCm 7.14 cells of the original pass had a lower VmPeak
+mapped-address-space envelope (mean −2.8%). The operator observed no system
+incident during the six-hour run, but raw dmesg/amdgpu logs were not retained.
+This result is therefore not a
 standalone stability qualification.
 
 ### Why TPOT is the primary cross-version metric
@@ -46,7 +50,7 @@ were not retained, so the repository does not claim identical token streams.
 | **TPOT `np=4`** (6 cells) | mean **−1.7%**, range −5.4%…+0.2% |
 | **Greedy Study 1 baselines** | +0.5% / +0.3% TPOT |
 | **Greedy Study 1 DFlash** | −5.8% / −6.4% TPOT; causal attribution needs repeats/profiling |
-| **VmPeak envelope** | mean −2.8%; lower in all 17 cells (range −1.8%…−7.0%) |
+| **VmPeak envelope** | mean −2.8%; lower in all 17 original cells (range −1.8%…−7.0%); added `np=16` baselines: 17gb +16.1%, dynamic −1.6% |
 | **DFlash acceptance** | similar; largest observed difference 1.21 percentage points |
 | **Run observation** | no incident observed in six hours; raw system logs not retained |
 
@@ -98,24 +102,78 @@ rates are similar; the largest observed difference is 1.21 percentage points.
 This evidence does not by itself prove which runtime component caused a TPOT
 change.
 
-### Table D — VmPeak mapped-address-space envelope (mean −2.8%)
+### Table D — VmPeak mapped-address-space envelope (original 17 cells, mean −2.8%)
 
-All 17 cells recorded a lower VmPeak on 7.14 (range −1.8%…−7.0%). VmPeak is
-virtual address-space size, not resident physical memory; this is an observed
-mapped-memory envelope difference.
+All 17 cells of the original pass recorded a lower VmPeak on 7.14 (range
+−1.8%…−7.0%). VmPeak is virtual address-space size, not resident physical
+memory; this is an observed mapped-memory envelope difference. The 2026-08-15
+`np=16` baselines sit outside it: 17gb is **+16.1%** higher than its 7.2.1
+twin, dynamic is −1.6% lower; both are excluded from this table's envelope
+statements.
 
 Full per-cell table (all metrics, both arms): [`../matrix-714/comparison.md`](../matrix-714/comparison.md).
 Rendered 7.14 matrix: [`../matrix-714/matrix.md`](../matrix-714/matrix.md).
 Per-cell summary evidence: [`../matrix-714/cell-*.json`](../matrix-714/) (each carries
 `manifest.rocm_version = "7.14.0"`).
 
-### c=16 — deferred (per scope), not re-run
+### c=16 — both baselines measured (2026-08-15); DFlash cells stay deferred
 
-The 4 c=16 cells are 7.2.1-only by design (this first pass excludes c=16 to
-limit sustained-load freeze risk). On 7.2.1 the c=16 **baselines** were healthy
-(17gb 34.5, dynamic 31.0 tok/s) and the c=16 **DFlash** cells were pathological
-([warning](../benchmark.md#c16-dflash-do-not-use)). All four remain deferred;
-the reduced run does not qualify the omitted high-concurrency scope.
+Both `study2 np=16` **baseline** cells were run to completion on 2026-08-15
+(`cell-study2-{17gb,dynamic}-np16-df0-vis0.json`, `manifest.rocm_version =
+"7.14.0"`) using the benchmark client **after** its SSE parsing was fixed to
+split the stream by newline framing (raw-chunk parsing silently dropped
+coalesced events at high concurrency; the pre-fix attempt's corrupt record
+was quarantined and never published). With identical flags, weights, prompts
+and seeds, both cells are healthy and closely track the 7.2.1 reference:
+
+| metric | 17gb 7.2.1 | 17gb 7.14 | Δ | dynamic 7.2.1 | dynamic 7.14 | Δ |
+|---|---|---|---|---|---|---|
+| aggregate tok/s (median rep) | 34.47 | **36.97** | +7.3% | 31.05 | **32.01** | +3.1% |
+| TTFT p50 / p90 (s) | 2.12 / 3.23 | 2.25 / 3.08 | +6.0% / −4.5% | 2.41 / 3.37 | 2.58 / 3.33 | +7.1% / −1.0% |
+| TPOT median (s) | 0.171 | 0.179 | +4.9% | 0.237 | 0.298 | +26.1% |
+| total generated tokens | 29,801 | 32,529 | +9.2% | 31,229 | 34,813 | +11.5% |
+| VmPeak (GiB) | 30.27 | 35.14 | **+16.1%** | 38.41 | 37.79 | −1.6% |
+
+These cells do not generalize to "c=16 is faster on 7.14" (no repeats, no
+profiling); they establish that **c=16 baseline serving is functional and in
+the same throughput band as 7.2.1**. The 17gb cell's VmPeak is *higher* than
+7.2.1's — the "lower VmPeak in all cells" statement below remains scoped to
+the original 17 cells.
+
+**Provenance disclosure (dynamic cell).** During the dynamic cell's
+warmup/first repetition (12:03–12:07), an unrelated `llama-bench` sweep
+briefly shared the GPU. The affected repetition is visible as the min
+(18.2 tok/s) against the reported median (32.0 tok/s); the median over five
+repetitions is robust to it. Disclosed for provenance completeness.
+
+**The two `np=16` DFlash cells remain deferred — the pathological
+combination stands.** A bounded 16×48-token probe
+(`probe-study2-17gb-np16-df1-max48-reps1.json`, `MAX_TOKENS=48`, `REPS=1`)
+completed at 16.9 tok/s aggregate with 19.3% draft acceptance, but the
+full-fidelity attempt (`MAX_TOKENS=512`, `REPS=5`) decayed from ~74 to ~35
+prompt-tokens/min as generations lengthened and was aborted by the operator
+at ~2 h with roughly 45% of the workload done — matching the 7.2.1 finding
+that c=16 + DFlash degrades with sustained long-generation load
+([warning](../benchmark.md#c16-dflash-do-not-use)). **Do not combine DFlash
+with `-np 16` on either runtime.**
+
+### Single-user flash-attn micro-sweep (2026-08-15, descriptive)
+
+`llama-bench` (`pp512`/`tg128`, `r=5`, exclusive GPU, same build and
+runtime; raw records: [`llama-bench-fa-sweep-17gb.json`](../matrix-714/llama-bench-fa-sweep-17gb.json),
+[`...-dynamic.json`](../matrix-714/llama-bench-fa-sweep-dynamic.json)):
+
+| weight | `-fa off` tg128 | `-fa on` tg128 | Δ | best pp512 |
+|---|---|---|---|---|
+| 17gb | 10.59–10.66 t/s | **10.87–10.95 t/s** | +2.3…+2.9% | 315.9 t/s (`-fa on`, `-ub 1024`) |
+| dynamic | 9.26–9.34 t/s | **9.47–9.50 t/s** | +1.7% | 309.2 t/s (`-fa on`, `-ub 512`) |
+
+`-ub` is insensitive for decode (±0.3 t/s across 256/512/1024 on both
+weights); flash-attn is the actionable knob. These sweeps are **descriptive
+single-run evidence** (no repeats, baseline decoding only — `llama-bench`
+cannot exercise DFlash in this build), so they do not change the validated
+matrix flags; they support `--flash-attn on` as a reasonable single-user
+baseline knob on gfx1151. Interaction with DFlash is untested.
 
 ---
 
@@ -174,6 +232,12 @@ hipcc --version
 
 - [x] `run-gguf-matrix-714.sh --dry-run all` → 17 cells (c=16 excluded).
 - [x] `run-gguf-matrix-714.sh all` → 17/17 cells written to `matrix-714/` + rendered.
+- [x] 2026-08-15: both `study2 np=16` **baseline** cells measured with the
+      fixed (newline-framing) benchmark client → 19 cells total; the pre-fix
+      attempt's corrupt record was quarantined, never published. The
+      full-fidelity 17gb `np=16` **DFlash** attempt was aborted at ~2 h with
+      decaying pace (bounded probe + record in the c=16 section); both
+      DFlash cells stay deferred.
 - [x] `compare_rocm.py` reviewed for one-sided/missing cells (c=16 cells noted as 7.2.1-only).
 - [x] Reviewed TPOT, TTFT, aggregate tok/s, VmPeak, DFlash acceptance, vision,
   finish reasons and recorded temperature; stability evidence is operator-level.
@@ -219,13 +283,17 @@ done
 A ROCm 7.14 result may be labeled **project-validated within an explicit scope**
 only when:
 
-- completed and deferred cells are explicit: ✓ (17/21; four `np=16` deferred)
+- completed and deferred cells are explicit: ✓ (19/21; both `np=16`
+  baselines measured 2026-08-15, two `np=16` DFlash cells deferred)
 - artifact, runtime and source identities are recorded: ✓
 - per-cell summaries, exact flags and SHA256 inventory are committed: ✓
 - absent raw response/server/system logs are disclosed: ✓
 - one-sided cells and metric confounds are reviewed: ✓
 - the ROCm 7.2.1 history remains unchanged: ✓
 
-**GGUF/llama.cpp status: project-validated within the recorded 17-cell scope.**
+**GGUF/llama.cpp status: project-validated within the recorded 19-cell scope.**
 **Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM validation
-pending.** The four `np=16` GGUF cells remain deferred.
+pending.** Of the four `np=16` GGUF cells, both baselines are measured
+(healthy, [`#c16`](#c16--both-baselines-measured-2026-08-15-dflash-cells-stay-deferred));
+the two DFlash cells remain deferred (pathological on 7.2.1; the 7.14
+full-fidelity attempt aborted with decaying pace).

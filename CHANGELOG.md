@@ -5,6 +5,39 @@ The v0.1.0 entry was dated after its initial local and hosted release-candidate
 gates passed. Tags and GitHub Releases are created only after final maintainer
 approval.
 
+## [Unreleased]
+
+### Added
+
+- The ROCm 7.14 GGUF matrix gains its 18th and 19th cells: **both `study2
+  np=16` baselines**, measured 2026-08-15 with the corrected benchmark client
+  — 17gb 36.97 tok/s aggregate vs 7.2.1's 34.47 (+7.3%) and dynamic 32.01
+  vs 31.05 (+3.1%), TTFT within ~7%. Scope statements, the validation
+  manifest, its schema, and the claim-consistency generator were updated
+  together; the two `np=16` DFlash cells remain deferred. A GPU-concurrency
+  overlap during the dynamic cell's first repetition is disclosed in the
+  scoped result (median-of-five unaffected).
+- The c=16 + DFlash pathology is now evidenced on 7.14 as well: a bounded
+  16×48 probe completed healthy (16.9 tok/s, 19.3% acceptance) but the
+  full-fidelity 17gb attempt decayed from ~74 to ~35 prompt-tokens/min and
+  was aborted at ~2 h. The probe record is committed beside the matrix;
+  the warning not to combine DFlash with `-np 16` now covers both runtimes.
+- A single-user `llama-bench` flash-attn micro-sweep (exclusive GPU,
+  both weights, raw records committed beside the matrix): `-fa on` is a
+  consistent +1.7…+2.8% decode win at `np=1` on gfx1151 and `-ub` is
+  insensitive for decode. Documented as descriptive evidence in the scoped
+  result; the validated matrix flags are unchanged.
+
+### Fixed
+
+- The benchmark client now parses the SSE stream by newline framing instead
+  of treating each raw HTTP chunk as one event. At high concurrency aiohttp
+  delivers several coalesced events per chunk, and the old parser silently
+  dropped them, undercounting tokens by orders of magnitude (real incident:
+  an `np=16` cell recorded 96 tokens against ~173k server-side; the corrupt
+  record was quarantined, not published). Fixed-client and legacy-client
+  numbers are identical at `np=1`/`np=4`, where chunks rarely coalesce.
+
 ## [0.1.1] - 2026-08-15
 
 ### Added
