@@ -13,7 +13,7 @@ delta for Ryzen AI and Radeon.
 
 Only Ryzen AI MAX+ PRO 395 / Radeon 8060S (`gfx1151`) has project-validated
 evidence today. **ROCm 7.14.0 is the recommended default** (GGUF/llama.cpp
-project-validated within a reduced 17-cell scope); **ROCm 7.2.1 remains the full
+project-validated within a reduced 18-cell scope); **ROCm 7.2.1 remains the full
 historical reference stack** (supplementary). Current rocBLAS BF16-GEMM proxy
 results did not justify prioritizing a ROCm 7.14 vLLM rebuild for v0.1. ROCm
 7.14 Muse-Glimmer vLLM validation is pending, historical 7.2.1 validation is

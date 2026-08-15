@@ -26,9 +26,10 @@ set and seeds; the intended experimental variable is the ROCm runtime. Mean TPOT
 deltas were −0.4% at `np=1` and −1.7% at `np=4`. Those cell-level means are
 descriptive and do not establish a general equivalence bound or speedup.
 
-All 17 ROCm 7.14 cells had a lower VmPeak mapped-address-space envelope (mean
-−2.8%). The operator observed no system incident during the six-hour run, but
-raw dmesg/amdgpu logs were not retained. This result is therefore not a
+All 17 ROCm 7.14 cells of the original pass had a lower VmPeak
+mapped-address-space envelope (mean −2.8%). The operator observed no system
+incident during the six-hour run, but raw dmesg/amdgpu logs were not retained.
+This result is therefore not a
 standalone stability qualification.
 
 ### Why TPOT is the primary cross-version metric
