@@ -22,6 +22,7 @@
 | dynamic | 1 | DFlash | 19.7 | 0.61 | 0.0530 | 29.4 | 19% |
 | dynamic | 4 | baseline | 21.0 | 1.20 | 0.1711 | 28.5 | — |
 | dynamic | 4 | DFlash | 31.1 | 1.32 | 0.1214 | 34.2 | 19% |
+| dynamic | 16 | baseline | 32.0 | 3.33 | 0.2984 | 37.8 | — |
 
 ### Study 3 — Vision axis (temp 1.0, mmproj + test image) — memory delta vs text-only
 

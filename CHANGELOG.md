@@ -9,12 +9,19 @@ approval.
 
 ### Added
 
-- The ROCm 7.14 GGUF matrix gains its 18th cell: the `study2 17gb np=16`
-  baseline, measured 2026-08-15 with the corrected benchmark client —
-  36.97 tok/s aggregate vs 7.2.1's 34.47 (+7.3%), TTFT p50 2.25 s, TPOT
-  +4.9%. Scope statements, the validation manifest, its schema, and the
-  claim-consistency generator were updated together (three `np=16` cells
-  remain deferred).
+- The ROCm 7.14 GGUF matrix gains its 18th and 19th cells: **both `study2
+  np=16` baselines**, measured 2026-08-15 with the corrected benchmark client
+  — 17gb 36.97 tok/s aggregate vs 7.2.1's 34.47 (+7.3%) and dynamic 32.01
+  vs 31.05 (+3.1%), TTFT within ~7%. Scope statements, the validation
+  manifest, its schema, and the claim-consistency generator were updated
+  together; the two `np=16` DFlash cells remain deferred. A GPU-concurrency
+  overlap during the dynamic cell's first repetition is disclosed in the
+  scoped result (median-of-five unaffected).
+- The c=16 + DFlash pathology is now evidenced on 7.14 as well: a bounded
+  16×48 probe completed healthy (16.9 tok/s, 19.3% acceptance) but the
+  full-fidelity 17gb attempt decayed from ~74 to ~35 prompt-tokens/min and
+  was aborted at ~2 h. The probe record is committed beside the matrix;
+  the warning not to combine DFlash with `-np 16` now covers both runtimes.
 
 ### Fixed
 

@@ -4,11 +4,10 @@
   "validated_on": "2026-08-13",
   "scope": {
     "inference_path": "llama.cpp GGUF",
-    "completed_cells": 18,
+    "completed_cells": 19,
     "planned_cells": 21,
     "deferred_cells": [
       "study2/17gb/dflash/np16",
-      "study2/dynamic/baseline/np16",
       "study2/dynamic/dflash/np16"
     ],
     "vllm_bf16_status": "pending"

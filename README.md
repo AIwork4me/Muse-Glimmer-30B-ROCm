@@ -105,7 +105,7 @@ These figures are validated on **ROCm 7.14.0** (the recommended default) via the
 GGUF/llama.cpp matrix ([`docs/results/matrix-714/`](docs/results/matrix-714/)).
 Mean TPOT delta versus 7.2.1 was -0.4% at `np=1` and -1.7% at `np=4`;
 individual cells ranged from -6.4% to +9.0% and -5.4% to +0.2%, respectively.
-The one comparable np=16 baseline pair was +4.9%
+The comparable np=16 baseline pairs averaged +15.5%
 ([comparison](docs/results/matrix-714/comparison.md)). These are
 `gfx1151` results, not Radeon dGPU claims.
 
@@ -294,12 +294,12 @@ cgroup accounting.
 <!-- BEGIN GENERATED: validation-tracks -->
 - **ROCm 7.14 gfx1151 (recommended default):** the reduced **GGUF/llama.cpp
   matrix is project-validated** on Ryzen AI MAX+ PRO 395 / Radeon 8060S,
-  18 of 21 planned cells; of the four `np=16` cells, the
-  17gb baseline was measured 2026-08-15 (healthy, fixed SSE-framing client) and 3
-  remain deferred. **Optional / not prioritized for v0.1; ROCm 7.14 Muse-Glimmer vLLM
-  validation pending.** Current rocBLAS BF16-GEMM proxy results did not justify prioritizing
-  a 7.14 rebuild; vLLM/BF16 stays validated on the 7.2.1 reference, so ROCm 7.14 is not
-  presented as a globally validated replacement for the historical stack.
+  19 of 21 planned cells; of the four `np=16` cells, both
+  baselines were measured 2026-08-15 (healthy, fixed SSE-framing client) and the
+  2 DFlash cells remain deferred (pathological scope). **Optional / not prioritized for v0.1; ROCm 7.14
+  Muse-Glimmer vLLM validation pending.** Current rocBLAS BF16-GEMM proxy results did not
+  justify prioritizing a 7.14 rebuild; vLLM/BF16 stays validated on the 7.2.1 reference, so
+  ROCm 7.14 is not presented as a globally validated replacement for the historical stack.
 - **ROCm 7.2.1 (historical reference, supplementary):** the full validated stack —
   the complete benchmark matrix, the vLLM-vs-llama.cpp head-to-head, and llama-bench — is
   preserved as immutable evidence. No result is relabeled or overwritten.
