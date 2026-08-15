@@ -4,10 +4,9 @@
   "validated_on": "2026-08-13",
   "scope": {
     "inference_path": "llama.cpp GGUF",
-    "completed_cells": 17,
+    "completed_cells": 18,
     "planned_cells": 21,
     "deferred_cells": [
-      "study2/17gb/baseline/np16",
       "study2/17gb/dflash/np16",
       "study2/dynamic/baseline/np16",
       "study2/dynamic/dflash/np16"
@@ -43,7 +42,10 @@
     "source_repo": "https://github.com/ggml-org/llama.cpp.git",
     "commit": "0b1bad14ff204627636aeb1de22ddcd5acb859d4",
     "build_arch": "gfx1151",
-    "cmake_flags": ["-DGGML_HIP=ON", "-DAMDGPU_TARGETS=gfx1151"],
+    "cmake_flags": [
+      "-DGGML_HIP=ON",
+      "-DAMDGPU_TARGETS=gfx1151"
+    ],
     "retained_binary_sha256": "03bb0d033e7f8cfd1b9e86197aa2fc7cfd65ff32878d239bda2bc00f359fc56b",
     "retained_libggml_hip_sha256": "880f0e7e8c06abb809568a1ae96568b906b4b86594e863cd464328094411165e"
   },

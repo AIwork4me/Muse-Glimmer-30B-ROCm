@@ -7,6 +7,15 @@ approval.
 
 ## [Unreleased]
 
+### Added
+
+- The ROCm 7.14 GGUF matrix gains its 18th cell: the `study2 17gb np=16`
+  baseline, measured 2026-08-15 with the corrected benchmark client —
+  36.97 tok/s aggregate vs 7.2.1's 34.47 (+7.3%), TTFT p50 2.25 s, TPOT
+  +4.9%. Scope statements, the validation manifest, its schema, and the
+  claim-consistency generator were updated together (three `np=16` cells
+  remain deferred).
+
 ### Fixed
 
 - The benchmark client now parses the SSE stream by newline framing instead

@@ -165,13 +165,16 @@ def validation_tracks(claims: dict, forward_manifest: dict) -> str:
     forward = claims["forward_validation"]
     scope = forward_manifest["scope"]
     platform = forward_manifest["platform"]
+    deferred = len(scope["deferred_cells"])
     return (
         f"- **ROCm {forward['rocm'][:4]} gfx1151 (recommended default):** the reduced "
         "**GGUF/llama.cpp\n"
         f"  matrix is project-validated** on {platform['hardware'].removeprefix('AMD ')},\n"
-        f"  {scope['completed_cells']} of {scope['planned_cells']} planned cells; the "
-        "four `np=16` cells\n"
-        "  were deferred. **Optional / not prioritized for v0.1; ROCm 7.14 "
+        f"  {scope['completed_cells']} of {scope['planned_cells']} planned cells; of the "
+        f"four `np=16` cells, the\n"
+        f"  17gb baseline was measured 2026-08-15 (healthy, fixed SSE-framing "
+        f"client) and {deferred}\n"
+        "  remain deferred. **Optional / not prioritized for v0.1; ROCm 7.14 "
         "Muse-Glimmer vLLM\n"
         "  validation pending.** Current rocBLAS BF16-GEMM proxy results did not "
         "justify prioritizing\n"
@@ -191,22 +194,27 @@ def expected_tpot_claim() -> tuple[str, str]:
     before = load_matrix(str(ROOT / "docs/results/matrix"))
     after = load_matrix(str(ROOT / "docs/results/matrix-714"))
     grouped = tpot_deltas_by_concurrency(before, after)
-    require(set(grouped) == {1, 4}, "unexpected TPOT concurrency groups")
+    # np=1/np=4 groups come from the original 17-cell pass; np=16 is the
+    # single 17gb baseline pair added 2026-08-15.
+    require(set(grouped) == {1, 4, 16}, "unexpected TPOT concurrency groups")
 
     def pct(value: float) -> str:
         return f"{value:+.1f}%"
 
     np1 = grouped[1]
     np4 = grouped[4]
+    np16 = grouped[16]
     full = (
         f"Mean TPOT delta versus 7.2.1 was {pct(mean(np1))} at np=1 and "
         f"{pct(mean(np4))} at np=4; individual cells ranged from "
         f"{pct(min(np1))} to {pct(max(np1))} and "
-        f"{pct(min(np4))} to {pct(max(np4))}, respectively"
+        f"{pct(min(np4))} to {pct(max(np4))}, respectively. The one "
+        f"comparable np=16 baseline pair was {pct(mean(np16))}"
     )
     compact = (
         f"mean TPOT delta was {pct(mean(np1))} at np=1 and "
-        f"{pct(mean(np4))} at np=4, while individual cells varied more"
+        f"{pct(mean(np4))} at np=4 (np=16 baseline pair {pct(mean(np16))}), "
+        f"while individual cells varied more"
     )
     return full, compact
 

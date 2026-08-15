@@ -5,7 +5,8 @@
 > scripts/benchmark.sh`. Raw JSON lands in `docs/results/*.json` (gitignored
 > runtime artifacts); the numbers below are the **ROCm 7.2.1 historical
 > reference** runs. In the [7.14 GGUF matrix](matrix-714/), mean TPOT delta was
-> -0.4% at `np=1` and -1.7% at `np=4`, while individual cells varied more. The
+> -0.4% at `np=1` and -1.7% at `np=4` (np=16 baseline pair +4.9%), while
+> individual cells varied more. The
 > head-to-head uses a controlled workload and matching concurrency, but precision,
 > engine, scheduler, and model format differ; treat it as a practical
 > workload-aligned comparison, not an architecture-normalized result.
@@ -370,8 +371,12 @@ done
 The reduced matrix was run side-by-side with the historical 7.2.1 evidence left
 intact. Recorded invariants include llama.cpp `0b1bad1`, flags, model artifacts,
 prompt set and seeds; the intended experimental variable is the ROCm runtime.
-The 7.14 arm contains 17 of 21 planned cells, with all four `np=16` cells
-deferred. See the [scoped result](rocm-7.14/README.md), [machine-readable
+The 7.14 arm contains 18 of 21 planned cells: the original pass covered 17,
+and the `np=16` 17gb baseline was added on 2026-08-15 with the corrected
+(newline-framing) benchmark client — healthy at 36.97 tok/s aggregate vs
+7.2.1's 34.47 (the pre-fix attempt's corrupt low-count record was quarantined
+and never published). The remaining three `np=16` cells stay deferred. See
+the [scoped result](rocm-7.14/README.md), [machine-readable
 manifest](../../configs/rocm-7.14-gguf-validation.json), and [per-cell
 comparison](matrix-714/comparison.md).
 
@@ -380,7 +385,7 @@ comparison](matrix-714/comparison.md).
 | TPOT `np=1` (11 cells) | mean **−0.4%**, range −6.4%…+9.0% |
 | TPOT `np=4` (6 cells) | mean **−1.7%**, range −5.4%…+0.2% |
 | Greedy Study 1 DFlash TPOT | **−5.8% / −6.4%**; independent repeats are needed before attributing a runtime improvement |
-| VmPeak mapped-address-space envelope | **−2.8% mean; lower in all 17 cells** |
+| VmPeak mapped-address-space envelope | **−2.8% mean; lower in all 17 original cells** (the added `np=16` baseline is +16.1%) |
 | DFlash acceptance | similar; largest observed difference **1.21 percentage points** |
 | Run observation | operator observed no incident in six hours; raw system logs were not retained |
 

@@ -4,60 +4,157 @@
   "title": "Scoped ROCm 7.14 GGUF validation manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "status", "validated_on", "scope", "platform", "host", "runtime", "llama_cpp", "model", "reference_stack", "evidence", "stability_observation"],
+  "required": [
+    "schema_version",
+    "status",
+    "validated_on",
+    "scope",
+    "platform",
+    "host",
+    "runtime",
+    "llama_cpp",
+    "model",
+    "reference_stack",
+    "evidence",
+    "stability_observation"
+  ],
   "properties": {
-    "schema_version": {"const": 1},
-    "status": {"const": "validated-scoped"},
-    "validated_on": {"type": "string", "format": "date"},
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "const": "validated-scoped"
+    },
+    "validated_on": {
+      "type": "string",
+      "format": "date"
+    },
     "scope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["inference_path", "completed_cells", "planned_cells", "deferred_cells", "vllm_bf16_status"],
+      "required": [
+        "inference_path",
+        "completed_cells",
+        "planned_cells",
+        "deferred_cells",
+        "vllm_bf16_status"
+      ],
       "properties": {
-        "inference_path": {"const": "llama.cpp GGUF"},
-        "completed_cells": {"const": 17},
-        "planned_cells": {"const": 21},
-        "deferred_cells": {"type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-        "vllm_bf16_status": {"const": "pending"}
+        "inference_path": {
+          "const": "llama.cpp GGUF"
+        },
+        "completed_cells": {
+          "const": 18
+        },
+        "planned_cells": {
+          "const": 21
+        },
+        "deferred_cells": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "vllm_bf16_status": {
+          "const": "pending"
+        }
       }
     },
     "platform": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hardware", "gpu_arch", "architecture_family", "memory"],
+      "required": [
+        "hardware",
+        "gpu_arch",
+        "architecture_family",
+        "memory"
+      ],
       "properties": {
-        "hardware": {"type": "string", "minLength": 1},
-        "gpu_arch": {"const": "gfx1151"},
-        "architecture_family": {"type": "string", "minLength": 1},
-        "memory": {"type": "string", "minLength": 1}
+        "hardware": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gpu_arch": {
+          "const": "gfx1151"
+        },
+        "architecture_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "memory": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "host": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kernel", "rocm_version", "distribution_target", "distribution_scope", "archive", "release_notes"],
+      "required": [
+        "kernel",
+        "rocm_version",
+        "distribution_target",
+        "distribution_scope",
+        "archive",
+        "release_notes"
+      ],
       "properties": {
-        "kernel": {"type": "string", "minLength": 1},
-        "rocm_version": {"const": "7.14.0"},
-        "distribution_target": {"const": "gfx1151"},
-        "distribution_scope": {"type": "string", "minLength": 1},
+        "kernel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rocm_version": {
+          "const": "7.14.0"
+        },
+        "distribution_target": {
+          "const": "gfx1151"
+        },
+        "distribution_scope": {
+          "type": "string",
+          "minLength": 1
+        },
         "archive": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["url", "size_bytes", "sha256"],
+          "required": [
+            "url",
+            "size_bytes",
+            "sha256"
+          ],
           "properties": {
-            "url": {"type": "string", "format": "uri"},
-            "size_bytes": {"type": "integer", "minimum": 1},
-            "sha256": {"$ref": "#/$defs/sha256"}
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "size_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
           }
         },
         "release_notes": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["url", "date"],
+          "required": [
+            "url",
+            "date"
+          ],
           "properties": {
-            "url": {"type": "string", "format": "uri"},
-            "date": {"type": "string", "format": "date"}
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "date": {
+              "type": "string",
+              "format": "date"
+            }
           }
         }
       }
@@ -65,73 +162,171 @@
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hip_version", "llvm_version"],
+      "required": [
+        "hip_version",
+        "llvm_version"
+      ],
       "properties": {
-        "hip_version": {"type": "string", "minLength": 1},
-        "llvm_version": {"type": "string", "minLength": 1}
+        "hip_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "llvm_version": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "llama_cpp": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source_repo", "commit", "build_arch", "cmake_flags", "retained_binary_sha256", "retained_libggml_hip_sha256"],
+      "required": [
+        "source_repo",
+        "commit",
+        "build_arch",
+        "cmake_flags",
+        "retained_binary_sha256",
+        "retained_libggml_hip_sha256"
+      ],
       "properties": {
-        "source_repo": {"type": "string", "format": "uri"},
-        "commit": {"$ref": "#/$defs/sha1"},
-        "build_arch": {"const": "gfx1151"},
-        "cmake_flags": {"type": "array", "minItems": 2, "items": {"type": "string", "minLength": 1}},
-        "retained_binary_sha256": {"$ref": "#/$defs/sha256"},
-        "retained_libggml_hip_sha256": {"$ref": "#/$defs/sha256"}
+        "source_repo": {
+          "type": "string",
+          "format": "uri"
+        },
+        "commit": {
+          "$ref": "#/$defs/sha1"
+        },
+        "build_arch": {
+          "const": "gfx1151"
+        },
+        "cmake_flags": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "retained_binary_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "retained_libggml_hip_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
       }
     },
     "model": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "revision", "artifact_manifest", "artifact_manifest_sha256_at_run"],
+      "required": [
+        "repository",
+        "revision",
+        "artifact_manifest",
+        "artifact_manifest_sha256_at_run"
+      ],
       "properties": {
-        "repository": {"type": "string", "minLength": 1},
-        "revision": {"$ref": "#/$defs/sha1"},
-        "artifact_manifest": {"const": "configs/artifact-manifest.json"},
-        "artifact_manifest_sha256_at_run": {"$ref": "#/$defs/sha256"}
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "$ref": "#/$defs/sha1"
+        },
+        "artifact_manifest": {
+          "const": "configs/artifact-manifest.json"
+        },
+        "artifact_manifest_sha256_at_run": {
+          "$ref": "#/$defs/sha256"
+        }
       }
     },
     "reference_stack": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["manifest", "manifest_sha256_at_run", "rocm_version"],
+      "required": [
+        "manifest",
+        "manifest_sha256_at_run",
+        "rocm_version"
+      ],
       "properties": {
-        "manifest": {"const": "configs/validated-stack.json"},
-        "manifest_sha256_at_run": {"$ref": "#/$defs/sha256"},
-        "rocm_version": {"const": "7.2.1"}
+        "manifest": {
+          "const": "configs/validated-stack.json"
+        },
+        "manifest_sha256_at_run": {
+          "$ref": "#/$defs/sha256"
+        },
+        "rocm_version": {
+          "const": "7.2.1"
+        }
       }
     },
     "evidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository_base_commit", "evidence_commit", "matrix", "checksums", "comparison", "methodology"],
+      "required": [
+        "repository_base_commit",
+        "evidence_commit",
+        "matrix",
+        "checksums",
+        "comparison",
+        "methodology"
+      ],
       "properties": {
-        "repository_base_commit": {"$ref": "#/$defs/sha1"},
-        "evidence_commit": {"$ref": "#/$defs/sha1"},
-        "matrix": {"const": "docs/results/matrix-714/"},
-        "checksums": {"const": "docs/results/matrix-714/SHA256SUMS"},
-        "comparison": {"const": "docs/results/matrix-714/comparison.md"},
-        "methodology": {"const": "docs/results/METHODOLOGY.md"}
+        "repository_base_commit": {
+          "$ref": "#/$defs/sha1"
+        },
+        "evidence_commit": {
+          "$ref": "#/$defs/sha1"
+        },
+        "matrix": {
+          "const": "docs/results/matrix-714/"
+        },
+        "checksums": {
+          "const": "docs/results/matrix-714/SHA256SUMS"
+        },
+        "comparison": {
+          "const": "docs/results/matrix-714/comparison.md"
+        },
+        "methodology": {
+          "const": "docs/results/METHODOLOGY.md"
+        }
       }
     },
     "stability_observation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["duration_hours", "status", "system_log_retained", "qualification"],
+      "required": [
+        "duration_hours",
+        "status",
+        "system_log_retained",
+        "qualification"
+      ],
       "properties": {
-        "duration_hours": {"type": "number", "minimum": 0},
-        "status": {"const": "operator-observed-no-incidents"},
-        "system_log_retained": {"const": false},
-        "qualification": {"type": "string", "minLength": 1}
+        "duration_hours": {
+          "type": "number",
+          "minimum": 0
+        },
+        "status": {
+          "const": "operator-observed-no-incidents"
+        },
+        "system_log_retained": {
+          "const": false
+        },
+        "qualification": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     }
   },
   "$defs": {
-    "sha1": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    "sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
   }
 }

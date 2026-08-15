@@ -47,7 +47,9 @@ def test_historical_rocm_7_2_1_cells_match_v1_schema():
 
 def test_scoped_rocm_7_14_cells_match_v1_schema():
     cells = sorted((ROOT / "docs/results/matrix-714").glob("cell-*.json"))
-    assert len(cells) == 17
+    # 17 cells from the 2026-08-13 pass + the np=16 17gb baseline measured
+    # 2026-08-15 with the fixed SSE-framing client.
+    assert len(cells) == 18
     for cell in cells:
         validate(cell, "benchmark-cell-v1.schema.json")
         assert read_json(cell)["manifest"]["rocm_version"] == "7.14.0"

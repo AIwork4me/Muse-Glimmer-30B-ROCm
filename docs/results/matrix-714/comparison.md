@@ -1,12 +1,13 @@
 # ROCm 7.2.1 vs 7.14.0 — cell-by-cell comparison
 
-- **7.2.1:** 21 cells   **7.14.0:** 17 cells   **compared:** 17
+- **7.2.1:** 21 cells   **7.14.0:** 18 cells   **compared:** 18
 
 ## Summary (TPOT, both arms measured)
 
 - TPOT is the primary, less length-confounded cross-version metric; negative Δ means lower per-token decode latency.
 - np=1: n=11, mean Δ **-0.4%**, range -6.4% … +9.0%
 - np=4: n=6, mean Δ **-1.7%**, range -5.4% … +0.2%
+- np=16: n=1, mean Δ **+4.9%**, range +4.9% … +4.9%
 - Aggregate tok/s remains in the tables, but sampled Study 2/3 comparisons can be generation-length-confounded.
 
 ## study1
@@ -26,7 +27,7 @@
 | 17gb np1 +DFlash | 22.26 | 21.37 | -4.0% | 483.0 | 484.0 | +0.2% | 566.7 | 566.0 | -0.1% | 43.5 | 47.4 | +9.0% | 27.27 | 26.65 | -2.3% | 19.4% |
 | 17gb np4 baseline | 15.60 | 21.93 | +40.6% | 873.8 | 825.1 | -5.6% | 1144.4 | 1170.5 | +2.3% | 177.8 | 175.0 | -1.6% | 27.24 | 25.73 | -5.5% | — |
 | 17gb np4 +DFlash | 27.30 | 32.42 | +18.7% | 944.2 | 896.9 | -5.0% | 1246.6 | 1159.2 | -7.0% | 106.6 | 103.9 | -2.5% | 33.44 | 31.11 | -7.0% | 18.6% |
-| 17gb np16 baseline  ⚠ no 7.14.0 cell | 34.47 | — | — | 2124.3 | — | — | 3225.5 | — | — | 170.6 | — | — | 30.27 | — | — | — |
+| 17gb np16 baseline | 34.47 | 36.97 | +7.3% | 2124.3 | 2251.5 | +6.0% | 3225.5 | 3081.6 | -4.5% | 170.6 | 179.0 | +4.9% | 30.27 | 35.14 | +16.1% | — |
 | 17gb np16 +DFlash  ⚠ no 7.14.0 cell; 7.2.1: pathological | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
 | dynamic np1 baseline | 9.09 | 9.21 | +1.3% | 519.5 | 495.3 | -4.7% | 604.1 | 578.1 | -4.3% | 109.1 | 107.7 | -1.3% | 27.16 | 26.54 | -2.3% | — |
 | dynamic np1 +DFlash | 19.89 | 19.69 | -1.0% | 516.8 | 518.8 | +0.4% | 607.8 | 605.4 | -0.4% | 52.1 | 53.0 | +1.8% | 30.04 | 29.45 | -2.0% | 19.4% |
