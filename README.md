@@ -6,6 +6,8 @@
 > **The reproducible RDNA reference for Meta Muse-Glimmer-30B — from
 > MI-series recipes to Ryzen AI and Radeon.**
 
+![](./docs/hero.jpg)
+
 **What you get:**
 
 - Run a ~30B multimodal reasoning/tool-use model **locally on validated Ryzen
