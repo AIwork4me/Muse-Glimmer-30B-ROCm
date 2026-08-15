@@ -139,16 +139,21 @@ def validate_forward_tracks(
                     f"{track['name']}: project-validated track requires evidence")
         if evidence is not None:
             resolve_evidence_path(evidence, root)
-    gguf_scope = tracks["GGUF/llama.cpp"]["scope"]
-    fwd_manifest = load("configs/rocm-7.14-gguf-validation.json")
-    scope = fwd_manifest["scope"]
-    deferred = len(scope["deferred_cells"])
-    require(gguf_scope.startswith(
-                f"{scope['completed_cells']} of {scope['planned_cells']} "
-                f"planned cells"),
-            "GGUF track scope disagrees with the validation manifest cell count")
-    require(f"{deferred} np=16 DFlash cells deferred" in gguf_scope,
-            "GGUF track scope disagrees with the deferred-cell count")
+    gguf = tracks.get("GGUF/llama.cpp")
+    manifest_path = root / "configs/rocm-7.14-gguf-validation.json"
+    if gguf is not None and manifest_path.is_file():
+        # Scope-string gate for the real repo tree only; synthetic/future
+        # track sets (see test_future_forward_track_needs_no_checker...) are
+        # exempt so adding tracks never requires checker changes.
+        gguf_scope = gguf["scope"]
+        scope = json.loads(manifest_path.read_text(encoding="utf-8"))["scope"]
+        deferred = len(scope["deferred_cells"])
+        require(gguf_scope.startswith(
+                    f"{scope['completed_cells']} of {scope['planned_cells']} "
+                    f"planned cells"),
+                "GGUF track scope disagrees with the validation manifest cell count")
+        require(f"{deferred} np=16 DFlash cells deferred" in gguf_scope,
+                "GGUF track scope disagrees with the deferred-cell count")
     return tracks
 
 
