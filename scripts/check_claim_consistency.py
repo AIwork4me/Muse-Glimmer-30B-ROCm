@@ -139,6 +139,16 @@ def validate_forward_tracks(
                     f"{track['name']}: project-validated track requires evidence")
         if evidence is not None:
             resolve_evidence_path(evidence, root)
+    gguf_scope = tracks["GGUF/llama.cpp"]["scope"]
+    fwd_manifest = load("configs/rocm-7.14-gguf-validation.json")
+    scope = fwd_manifest["scope"]
+    deferred = len(scope["deferred_cells"])
+    require(gguf_scope.startswith(
+                f"{scope['completed_cells']} of {scope['planned_cells']} "
+                f"planned cells"),
+            "GGUF track scope disagrees with the validation manifest cell count")
+    require(f"{deferred} np=16 DFlash cells deferred" in gguf_scope,
+            "GGUF track scope disagrees with the deferred-cell count")
     return tracks
 
 
@@ -195,8 +205,8 @@ def expected_tpot_claim() -> tuple[str, str]:
     before = load_matrix(str(ROOT / "docs/results/matrix"))
     after = load_matrix(str(ROOT / "docs/results/matrix-714"))
     grouped = tpot_deltas_by_concurrency(before, after)
-    # np=1/np=4 groups come from the original 17-cell pass; np=16 is the
-    # single 17gb baseline pair added 2026-08-15.
+    # np=1/np=4 groups come from the original 17-cell pass; the np=16 group
+    # holds the two baseline pairs (17gb, dynamic) added 2026-08-15.
     require(set(grouped) == {1, 4, 16}, "unexpected TPOT concurrency groups")
 
     def pct(value: float) -> str:

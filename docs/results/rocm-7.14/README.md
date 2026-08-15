@@ -165,8 +165,8 @@ runtime; raw records: [`llama-bench-fa-sweep-17gb.json`](../matrix-714/llama-ben
 
 | weight | `-fa off` tg128 | `-fa on` tg128 | Δ | best pp512 |
 |---|---|---|---|---|
-| 17gb | 10.59–10.66 t/s | **10.87–10.95 t/s** | +2.3…+2.8% | 315.9 t/s (`-fa on`, `-ub 1024`) |
-| dynamic | 9.26–9.34 t/s | **9.47–9.50 t/s** | +1.7% | 309.3 t/s (`-fa on`, `-ub 512`) |
+| 17gb | 10.59–10.66 t/s | **10.87–10.95 t/s** | +2.3…+2.9% | 315.9 t/s (`-fa on`, `-ub 1024`) |
+| dynamic | 9.26–9.34 t/s | **9.47–9.50 t/s** | +1.7% | 309.2 t/s (`-fa on`, `-ub 512`) |
 
 `-ub` is insensitive for decode (±0.3 t/s across 256/512/1024 on both
 weights); flash-attn is the actionable knob. These sweeps are **descriptive
