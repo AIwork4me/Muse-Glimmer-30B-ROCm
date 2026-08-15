@@ -157,6 +157,24 @@ that c=16 + DFlash degrades with sustained long-generation load
 ([warning](../benchmark.md#c16-dflash-do-not-use)). **Do not combine DFlash
 with `-np 16` on either runtime.**
 
+### Single-user flash-attn micro-sweep (2026-08-15, descriptive)
+
+`llama-bench` (`pp512`/`tg128`, `r=5`, exclusive GPU, same build and
+runtime; raw records: [`llama-bench-fa-sweep-17gb.json`](../matrix-714/llama-bench-fa-sweep-17gb.json),
+[`...-dynamic.json`](../matrix-714/llama-bench-fa-sweep-dynamic.json)):
+
+| weight | `-fa off` tg128 | `-fa on` tg128 | Δ | best pp512 |
+|---|---|---|---|---|
+| 17gb | 10.59–10.66 t/s | **10.87–10.95 t/s** | +2.3…+2.8% | 315.9 t/s (`-fa on`, `-ub 1024`) |
+| dynamic | 9.26–9.34 t/s | **9.47–9.50 t/s** | +1.7% | 309.3 t/s (`-fa on`, `-ub 512`) |
+
+`-ub` is insensitive for decode (±0.3 t/s across 256/512/1024 on both
+weights); flash-attn is the actionable knob. These sweeps are **descriptive
+single-run evidence** (no repeats, baseline decoding only — `llama-bench`
+cannot exercise DFlash in this build), so they do not change the validated
+matrix flags; they support `--flash-attn on` as a reasonable single-user
+baseline knob on gfx1151. Interaction with DFlash is untested.
+
 ---
 
 ## Protocol

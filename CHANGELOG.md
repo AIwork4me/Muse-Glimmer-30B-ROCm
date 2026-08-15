@@ -22,6 +22,11 @@ approval.
   full-fidelity 17gb attempt decayed from ~74 to ~35 prompt-tokens/min and
   was aborted at ~2 h. The probe record is committed beside the matrix;
   the warning not to combine DFlash with `-np 16` now covers both runtimes.
+- A single-user `llama-bench` flash-attn micro-sweep (exclusive GPU,
+  both weights, raw records committed beside the matrix): `-fa on` is a
+  consistent +1.7…+2.8% decode win at `np=1` on gfx1151 and `-ub` is
+  insensitive for decode. Documented as descriptive evidence in the scoped
+  result; the validated matrix flags are unchanged.
 
 ### Fixed
 
