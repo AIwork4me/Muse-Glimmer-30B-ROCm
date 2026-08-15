@@ -5,6 +5,18 @@ The v0.1.0 entry was dated after its initial local and hosted release-candidate
 gates passed. Tags and GitHub Releases are created only after final maintainer
 approval.
 
+## [Unreleased]
+
+### Fixed
+
+- The benchmark client now parses the SSE stream by newline framing instead
+  of treating each raw HTTP chunk as one event. At high concurrency aiohttp
+  delivers several coalesced events per chunk, and the old parser silently
+  dropped them, undercounting tokens by orders of magnitude (real incident:
+  an `np=16` cell recorded 96 tokens against ~173k server-side; the corrupt
+  record was quarantined, not published). Fixed-client and legacy-client
+  numbers are identical at `np=1`/`np=4`, where chunks rarely coalesce.
+
 ## [0.1.1] - 2026-08-15
 
 ### Added

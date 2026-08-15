@@ -62,20 +62,24 @@ class _FakeSession:
         self._n_delta = n_delta
         self._send_usage = send_usage
 
-    def post(self, url, json=None, **kw):
-        self.last_body = json or {}
+    def _build_lines(self, send_usage, include_usage):
         lines = []
         for _ in range(self._n_delta):
             lines.append('data: ' + jsonlib.dumps({"choices": [{"delta": {"content": "x"}}]}) + '\n\n')
         lines.append('data: ' + jsonlib.dumps({"choices": [{"index": 0, "finish_reason": "stop"}]}) + '\n\n')
         # Server-side gating: usage chunk appears iff the client asked for it.
-        if self._send_usage and json and json.get("stream_options", {}).get("include_usage") is True:
+        if send_usage and include_usage:
             lines.append('data: ' + jsonlib.dumps({
                 "choices": [],
                 "usage": {"prompt_tokens": 5, "completion_tokens": self._completion_tokens},
             }) + '\n\n')
         lines.append("data: [DONE]\n\n")
-        return _FakeResp(lines)
+        return lines
+
+    def post(self, url, json=None, **kw):
+        self.last_body = json or {}
+        include = bool(json and json.get("stream_options", {}).get("include_usage") is True)
+        return _FakeResp(self._build_lines(self._send_usage, include))
 
 
 def _chat_payload():
@@ -108,3 +112,39 @@ def test_stream_one_falls_back_when_usage_chunk_absent():
     sess = _FakeSession(completion_tokens=10, send_usage=False)
     res = asyncio.run(stream_one(sess, "http://x", _chat_payload()))
     assert res["n_tokens"] == 1  # degenerate fallback — the bug signature
+
+
+def test_stream_one_parses_coalesced_sse_chunks():
+    """Locks the np=16 counting fix (2026-08-15): aiohttp's content iterator
+    yields arbitrary byte chunks, and at high event rates the whole stream can
+    arrive coalesced into few chunks. The pre-fix parser treated each raw chunk
+    as a single event, so a coalesced stream lost its usage chunk and every
+    request degraded to the n_tokens=1 fallback — a cell whose total_tokens
+    equaled the request count (real incident: 96 recorded vs ~188k generated).
+    Emit the identical event stream as ONE chunk; counts must be unchanged."""
+    sess = _FakeSession(completion_tokens=10)
+    lines = sess._build_lines(send_usage=True, include_usage=True)
+    res = _run_with_chunks(["".join(lines)])
+    assert res["n_tokens"] == 10
+    assert res["finish_reason"] == "stop"
+
+
+def test_stream_one_parses_partial_lines_across_chunks():
+    """Same fix, second failure shape: every event line split at arbitrary
+    byte boundaries (7-byte chunks), so no chunk ever aligns with a line."""
+    sess = _FakeSession(completion_tokens=10)
+    lines = sess._build_lines(send_usage=True, include_usage=True)
+    stream = "".join(lines).encode()
+    chunks = [stream[i:i + 7] for i in range(0, len(stream), 7)]
+    res = _run_with_chunks(chunks)
+    assert res["n_tokens"] == 10
+    assert res["finish_reason"] == "stop"
+
+
+def _run_with_chunks(chunks):
+    async def _inner():
+        class _Sess:
+            def post(self, url, json=None, **kw):
+                return _FakeResp([c.decode() if isinstance(c, bytes) else c for c in chunks])
+        return await stream_one(_Sess(), "http://x", _chat_payload())
+    return asyncio.run(_inner())

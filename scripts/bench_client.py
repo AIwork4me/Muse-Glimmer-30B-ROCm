@@ -140,17 +140,29 @@ async def stream_one(session, base, payload):
         # failure yields an empty read → n_tokens falls back to 1 → a corrupt
         # "fast" cell. The legacy one() path already reads JSON + raises.
         r.raise_for_status()
-        async for raw in r.content:
-            line = raw.decode(errors="ignore").strip()
+        # SSE framing: events are newline-delimited, but aiohttp's content
+        # iterator yields ARBITRARY byte chunks — one chunk may carry several
+        # events or a partial one. Treating each raw chunk as one event parses
+        # only the chunks that happen to align with a single line; every
+        # coalesced event (usage chunks included) silently fails json.loads.
+        # At np=1/np=4 chunks rarely coalesce; at np=16 they mostly do, so the
+        # np=16 17gb baseline cell of 2026-08-15 recorded 96 tokens where the
+        # server log showed ~188k generated. Buffer and split on newlines so
+        # parsing is independent of chunk boundaries.
+        def _feed(line):
+            # Returns True when the [DONE] sentinel was seen. Sets first_t/
+            # last_t/n_tokens/finish on the caller's locals.
+            nonlocal first_t, last_t, n_tokens, finish
+            line = line.strip()
             if not line.startswith("data:"):
-                continue
+                return False
             data = line[5:].strip()
             if data == "[DONE]":
-                break
+                return True
             try:
                 obj = json.loads(data)
             except json.JSONDecodeError:
-                continue
+                return False
             now = time.perf_counter()
             if first_t is None:
                 first_t = now
@@ -161,6 +173,23 @@ async def stream_one(session, base, payload):
             ch = obj.get("choices") or []
             if ch and "finish_reason" in ch[0] and ch[0]["finish_reason"]:
                 finish = ch[0]["finish_reason"]
+            return False
+
+        buf = ""
+        done = False
+        async for raw in r.content:
+            buf += raw.decode(errors="ignore")
+            while "\n" in buf:
+                line, buf = buf.split("\n", 1)
+                if _feed(line):
+                    done = True
+                    break
+            if done:
+                break
+        if not done and buf:
+            # EOF mid-line: parse the unterminated final event, matching the
+            # pre-buffering behavior of treating a whole chunk as one line.
+            _feed(buf)
     t1 = time.perf_counter()
     if n_tokens == 0 and last_t:  # fallback: no usage reported
         n_tokens = 1
