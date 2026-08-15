@@ -120,7 +120,7 @@ def test_stream_one_parses_coalesced_sse_chunks():
     arrive coalesced into few chunks. The pre-fix parser treated each raw chunk
     as a single event, so a coalesced stream lost its usage chunk and every
     request degraded to the n_tokens=1 fallback — a cell whose total_tokens
-    equaled the request count (real incident: 96 recorded vs ~188k generated).
+    equaled the request count (real incident: 96 recorded vs ~174k generated).
     Emit the identical event stream as ONE chunk; counts must be unchanged."""
     sess = _FakeSession(completion_tokens=10)
     lines = sess._build_lines(send_usage=True, include_usage=True)

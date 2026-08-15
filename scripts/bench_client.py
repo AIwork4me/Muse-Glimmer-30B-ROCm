@@ -147,7 +147,7 @@ async def stream_one(session, base, payload):
         # coalesced event (usage chunks included) silently fails json.loads.
         # At np=1/np=4 chunks rarely coalesce; at np=16 they mostly do, so the
         # np=16 17gb baseline cell of 2026-08-15 recorded 96 tokens where the
-        # server log showed ~188k generated. Buffer and split on newlines so
+        # server log showed ~174k generated. Buffer and split on newlines so
         # parsing is independent of chunk boundaries.
         def _feed(line):
             # Returns True when the [DONE] sentinel was seen. Sets first_t/
