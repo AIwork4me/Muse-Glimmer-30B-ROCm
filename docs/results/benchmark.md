@@ -176,6 +176,15 @@ Study 2 below). The pathology is DFlash-specific. Both c=16 DFlash cells are
 recorded as evidence-based non-completions (`pathological: true`); they are not
 missing data, they are *findings*.
 
+**Upstream follow-up (2026-08-15):** the deeper cause has since been isolated
+by controlled diagnostic probes and reported as
+[ggml-org/llama.cpp#27117](https://github.com/ggml-org/llama.cpp/issues/27117) —
+a per-slot draft corruption that begins around 8 concurrently drafting
+sequences (not the `-np` configuration itself, not the batch token count).
+`--spec-draft-n-max 1` is a measured workaround in those probes (~2.2× the
+no-spec baseline at c=16); it is diagnostic evidence, not a validated matrix
+cell.
+
 **Best-practice table (user-facing):**
 
 | Use case | Config | Expected |

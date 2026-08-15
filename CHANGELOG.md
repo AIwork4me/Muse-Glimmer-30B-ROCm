@@ -9,6 +9,21 @@ approval.
 
 ### Added
 
+- The c=16 + DFlash pathology's deeper root cause was isolated via controlled
+  diagnostic probes (fresh server per probe, bounded request waves) and
+  **reported upstream as
+  [ggml-org/llama.cpp#27117](https://github.com/ggml-org/llama.cpp/issues/27117)**:
+  the draft model's predictions are corrupted per slot once roughly 8+ sequences
+  draft concurrently — the trigger is the concurrently-drafting sequence count,
+  not the server's `-np` configuration (an `-np 16` server with 4 in-flight
+  requests reproduces `-np 4` bit-for-bit) and not the batch token count.
+  `--spec-draft-n-max 1` avoids the corruption (0.83–0.92 acceptance at
+  `-np 16`, ~2.2× the no-spec baseline in the probes). Reproduced on llama.cpp
+  master `0177dcc` and on both ROCm runtimes. README, troubleshooting,
+  methodology, benchmark and the scoped 7.14 result now link the issue; the
+  two deferred `np=16` DFlash cells stay deferred pending an upstream fix.
+  The probes are diagnostic records carried by the upstream issue, not matrix
+  cells.
 - The ROCm 7.14 GGUF matrix gains its 18th and 19th cells: **both `study2
   np=16` baselines**, measured 2026-08-15 with the corrected benchmark client
   — 17gb 36.97 tok/s aggregate vs 7.2.1's 34.47 (+7.3%) and dynamic 32.01

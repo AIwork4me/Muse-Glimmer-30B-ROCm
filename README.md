@@ -259,7 +259,7 @@ required manifest, command, logs and results. See
 | llama.cpp HIP + 17GB/dynamic K-quant | Validated on `gfx1151` |
 | llama.cpp DFlash, c=1 or light c≤4 | Validated; speedup depends on workload |
 | `-md dflash.gguf` without `--spec-type draft-dflash` | Silent no-op; do not use |
-| DFlash + `-np 16` | Pathological; one cell aborted after 5 h 16 m |
+| DFlash + `-np 16` | Pathological; one cell aborted after 5 h 16 m; root cause diagnosed and [reported upstream](https://github.com/ggml-org/llama.cpp/issues/27117) |
 | AITER or FP8 vLLM paths on `gfx1151` | Not supported by this validated stack |
 | Radeon W7900 / other dGPUs | Pending evidence |
 
