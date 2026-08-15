@@ -315,10 +315,29 @@ paid in full. The draft model's predictions diverge badly from the target under
 batched concurrent load, so spec-decode goes into reverse — it costs more than
 it saves.
 
+**Upstream status (2026-08-15): root cause diagnosed and reported.** Controlled
+diagnostic probes on the 7.14 stack (fresh server per probe, same flags and
+seed; diagnostic records, not matrix cells) isolated the deeper mechanism: the
+drafter's predictions are corrupted **per slot, from the first speculative
+tick**, once roughly **8 or more sequences draft concurrently** — 16 identical
+requests spread from ~0.05 to ~0.50 acceptance while ≤4 concurrent sequences
+stay healthy at ~0.5–0.66. The trigger is the count of concurrently drafting
+sequences, not the server's `-np` configuration (an `-np 16` server with 4
+in-flight requests is bit-identical to `-np 4`) and not the batch token count.
+`--spec-draft-n-max 1` sidesteps the corruption (0.83–0.92 acceptance at
+`-np 16`, ~80 tok/s vs the ~37 tok/s no-spec baseline). Verified unchanged on
+llama.cpp master `0177dcc`. Reported upstream as
+[ggml-org/llama.cpp#27117](https://github.com/ggml-org/llama.cpp/issues/27117)
+with the full discrimination matrix and a copy-pasteable reproduction.
+
 **Fix:** at `c ≥ 8` (especially `c = 16`), **drop DFlash** (just omit `-md` and
 the `--spec-*` flags) and run the baseline. c=16 baselines are healthy:
 **17gb 34.5 tok/s, dynamic 31.0 tok/s aggregate.** DFlash is a clear win only at
-`c ≤ 4` (best at `c = 1`: ~2.2×). The full best-practice table is in
+`c ≤ 4` (best at `c = 1`: ~2.2×). If DFlash must stay on under high
+concurrency, `--spec-draft-n-max 1` avoided the corruption in the diagnostic
+probes (see [upstream issue](https://github.com/ggml-org/llama.cpp/issues/27117))
+— treat it as unvalidated-here guidance, not a matrix result. The full
+best-practice table is in
 [`README.md`](../README.md#known-good-and-known-bad).
 
 > c=16 itself is fine — the pathology is DFlash-specific. Both c=16 DFlash cells

@@ -266,6 +266,20 @@ The short version, for the science record:
 Both c=16 DFlash cells are recorded as evidence-based non-completions
 (`pathological: true`); they are not missing data, they are *findings*.
 
+**Follow-up (2026-08-15): deeper cause isolated and reported upstream.**
+Controlled diagnostic probes (fresh server per probe, bounded request waves,
+same flags and seeds; diagnostic records, not matrix cells) showed the
+acceptance collapse is a **per-slot draft corruption that begins around 8
+concurrently drafting sequences** — independent of the server's `-np`
+configuration (an `-np 16` server with only 4 in-flight requests reproduces the
+`-np 4` results bit-for-bit) and of the batch token count. `--spec-draft-n-max
+1` avoids it (0.83–0.92 acceptance at `-np 16`, ~2.2× the no-spec baseline in
+the probes). Reproduced identically on llama.cpp master `0177dcc` and on both
+ROCm runtimes (7.2.1 and 7.14.0). Filed as
+[ggml-org/llama.cpp#27117](https://github.com/ggml-org/llama.cpp/issues/27117)
+with the full discrimination matrix; the two deferred cells stay deferred
+pending an upstream fix.
+
 ---
 
 ## 7. Statistical protocol (spec §6.2)

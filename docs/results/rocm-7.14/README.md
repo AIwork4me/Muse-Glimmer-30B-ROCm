@@ -157,6 +157,13 @@ that c=16 + DFlash degrades with sustained long-generation load
 ([warning](../benchmark.md#c16-dflash-do-not-use)). **Do not combine DFlash
 with `-np 16` on either runtime.**
 
+**Root cause reported upstream (2026-08-15).** Controlled diagnostic probes on
+this stack isolated the mechanism (per-slot draft corruption from ~8
+concurrently drafting sequences; see
+[ggml-org/llama.cpp#27117](https://github.com/ggml-org/llama.cpp/issues/27117),
+reproduced on master `0177dcc`). The two deferred cells stay deferred pending
+an upstream fix.
+
 ### Single-user flash-attn micro-sweep (2026-08-15, descriptive)
 
 `llama-bench` (`pp512`/`tg128`, `r=5`, exclusive GPU, same build and
