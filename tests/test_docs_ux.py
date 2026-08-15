@@ -8,12 +8,9 @@ the docs promise behavior the scripts rely on, so pin the promise.
 F-06/F-07/F-08 - the Quick start must carry the user past a bare server URL:
 second-terminal guidance, a verified health + completion request pair, and the
 reasoning-first `max_tokens` warning that keeps a first completion non-empty.
-F-13 - per-distro host-tool one-liners must exist in README, which must also
-describe what the scripts actually print on ``required command not found``
-(the installer and checker name the single missing tool; the quickstart
-prints no install hint).
-F-17/F-10 - ``MODEL_DEST`` and the optional-asset sizes must be documented
-next to the other env knobs / download sizes.
+F-13/F-17/F-10 - the per-distro host-tool one-liners, the env knobs and the
+optional-asset sizes live in the getting-started details page (README links
+to it), pinned where the scripts rely on those promises.
 Fold-ins - the dirty-checkout entry's mid-switch recovery, the corrected
 ``--spec-draft-n-max 15`` in adaptation.md, and the hardware-validation
 BIOS/UMA sizing pointer.
@@ -63,9 +60,9 @@ def test_quickstart_documents_reasoning_first_behavior() -> None:
 
 
 def test_requirements_have_per_distro_tool_install_one_liners() -> None:
-    requirements = _src("README.md").split(
-        "## Requirements and operating notes", 1
-    )[1]
+    requirements = _src("docs/getting-started.md").split(
+        "## Prerequisites", 1
+    )[1].split("\n## ", 1)[0]
     # F-13: same verbs the scripts print on failure (apt-get/dnf/pacman).
     assert "sudo apt-get install git cmake curl python3" in requirements
     assert "sudo dnf install git cmake curl python3" in requirements
@@ -86,11 +83,14 @@ def test_troubleshooting_has_missing_tool_entry() -> None:
     assert "required command not found" in doc
 
 
+def _reproducibility_contract() -> str:
+    return _src("docs/getting-started.md").split(
+        "## Reproducibility contract", 1
+    )[1].split("\n## ", 1)[0]
+
+
 def test_model_dest_is_documented_with_the_other_env_knobs() -> None:
-    readme = _src("README.md")
-    contract = readme.split("## Reproducibility contract", 1)[1].split(
-        "## Hardware validation matrix", 1
-    )[0]
+    contract = _reproducibility_contract()
     assert "MODEL_DEST=" in contract
     assert "bash scripts/gguf-quickstart.sh" in contract
     # F-17's point: the 15.6 GiB model is reusable across clones.
@@ -98,11 +98,7 @@ def test_model_dest_is_documented_with_the_other_env_knobs() -> None:
 
 
 def test_overrides_banner_scopes_the_experimental_track_to_revision_overrides() -> None:
-    readme = _src("README.md")
-    contract = readme.split("## Reproducibility contract", 1)[1].split(
-        "## Hardware validation matrix", 1
-    )[0]
-    banner = contract.split("```bash", 1)[0]
+    banner = _reproducibility_contract().split("```bash", 1)[0]
     # Final-review Minor-2: only revision overrides move a run to the
     # reported-as-latest/experimental track (what the scripts actually print);
     # HF_ENDPOINT/MODEL_DEST are transport/location knobs that keep the
@@ -149,7 +145,7 @@ def test_hardware_validation_has_bios_uma_sizing_pointer() -> None:
     # and the README requirements, not silence.
     assert "80 GiB" in doc
     assert "00-check-env.sh" in doc
-    assert "README.md#requirements-and-operating-notes" in doc
+    assert "README.md#requirements" in doc
     # Matches the checker's verbatim term (00-check-env.sh prints
     # "validated envelope 80 GiB GPU-visible — warning boundary, not a minimum").
     assert "warning boundary, not a minimum" in doc

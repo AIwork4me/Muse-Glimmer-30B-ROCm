@@ -30,7 +30,7 @@ GPU-visible floor for the default GGUF path is the ~15.6 GiB model size. Hosts
 configured below that boundary are not invalid: compare your pool against the
 thresholds `scripts/00-check-env.sh` prints next to the measured number
 (GPU-visible memory, explicitly not disk) and the
-[README requirements](../README.md#requirements-and-operating-notes). A pool
+[README requirements](../README.md#requirements). A pool
 far smaller than your BIOS UMA setting is the
 [uma-bug](troubleshooting.md#uma-bug) kernel issue, not sizing.
 

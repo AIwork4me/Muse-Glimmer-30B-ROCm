@@ -7,6 +7,21 @@ approval.
 
 ## [Unreleased]
 
+### Changed
+
+- README restructured for first-visit readability: **what you get,
+  performance highlights and the quick start now lead**; the detailed
+  explanations (prerequisites with per-distro tool installs, installer
+  internals, download sizes, the reproducibility contract and env overrides)
+  moved to a new [docs/getting-started.md](docs/getting-started.md) page that
+  the README links, and a documentation map was added. No claim changed: the
+  three README generated blocks, the TPOT sentence, the known-good/bad table
+  and the claims-hygiene caveats are preserved verbatim or linked to their
+  existing homes (the memory-terminology explainer was redundant with
+  METHODOLOGY §5, which the docs map now points at). The docs-UX tests that
+  pinned the moved content were updated to its new location, and the
+  hardware-validation README anchor now targets `#requirements`.
+
 ### Added
 
 - The c=16 + DFlash pathology's deeper root cause was isolated via controlled
