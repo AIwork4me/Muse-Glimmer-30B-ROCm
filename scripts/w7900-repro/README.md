@@ -42,7 +42,7 @@ bash 00_prepare.sh        # download 4 GGUFs from the OFFICIAL HF -> <repo>/mode
 ## Method 1 · image (Docker)
 
 The image is built **from the true base** `flagos/flagtree-amd-tle:rocm7.2.4`
-(same base as [`../../deploy/Dockerfile`](../../deploy/Dockerfile)), pinned to the
+(see [`Dockerfile`](Dockerfile)), pinned to the
 official Hugging Face. It copies a prebuilt gfx1100 `llama-server` from `bin/` —
 stage it there first (see [`bin/README.md`](bin/README.md)); it is a custom
 muse-glimmer + DFlash build, not upstream `ggml-org/llama.cpp`, so it is not

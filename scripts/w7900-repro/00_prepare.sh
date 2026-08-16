@@ -25,7 +25,11 @@ if [ "${#need[@]}" -gt 0 ]; then
     || python3 -m pip install --user -q huggingface_hub \
     || { echo "  ERROR: cannot import/install huggingface_hub"; exit 1; }
   echo "  downloading: ${need[*]}  (endpoint: ${HF_ENDPOINT:-official huggingface.co})"
-  ${HF_ENDPOINT:+HF_ENDPOINT="$HF_ENDPOINT"} python3 - "$HF_REPO" "$MODELS_HOST" "${need[@]}" <<'PY'
+  # Export (not an inline `VAR=x cmd` built from a parameter expansion: bash
+  # treats the expanded word as the command name and fails with "No such file
+  # or directory" whenever HF_ENDPOINT is set). huggingface_hub reads it.
+  export HF_ENDPOINT
+  python3 - "$HF_REPO" "$MODELS_HOST" "${need[@]}" <<'PY'
 import os, sys
 from huggingface_hub import hf_hub_download
 repo, outdir = sys.argv[1], sys.argv[2]
