@@ -1,0 +1,62 @@
+{
+  "study": "study2",
+  "weight": "17gb",
+  "dflash": true,
+  "vision": false,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 54.68798853373626,
+    "total_tokens": 2729,
+    "wall_s": 49.901268508285284,
+    "ttft_p50": 0.18495913688093424,
+    "ttft_p90": 0.22745265997946262,
+    "tpot_median": 0.017841528926168637,
+    "agg_tok_s_min": 54.47703005840994,
+    "agg_tok_s_max": 57.269866641420826,
+    "reps": 5,
+    "finish_reason_dist": {
+      "length": 20,
+      "stop": 10
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 39554348,
+    "VmPeak_gib": 37.72,
+    "VmHWM_kib": 16716408,
+    "VmHWM_gib": 15.94,
+    "VmRSS_kib": 2436744,
+    "VmRSS_gib": 2.32,
+    "RssShmem_kib": 0,
+    "RssShmem_gib": 0.0,
+    "vram_used_mib": 18172.0,
+    "vram_total_mib": 49136.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 10822,
+    "draft_tokens": 56871,
+    "acceptance_rate": 0.19029030613142023,
+    "avg_accepted_per_step": 4.0071875
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": 58.0,
+    "temp_c": 54.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 15",
+    "seed": 42,
+    "reps": 5,
+    "build": "0b1bad1",
+    "rocm_version": "7.2.1",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Graphics\", \"Card Model\": \"0x744b\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"D7070910\", \"Subsystem ID\": \"0x0e0c\", \"Device Rev\": \"0x00\", \"Node ID\": \"3\", \"GUID\": \"49884\", \"GFX Version\": \"gfx1100\"}}",
+    "kernel": "6.8.0-79-generic",
+    "date": "2026-08-16"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 10822.0,
+    "draft_tokens": 56871.0,
+    "avg_accepted_per_step": 2.8389296956977965,
+    "acceptance_rate": 0.19029030613142023
+  }
+}

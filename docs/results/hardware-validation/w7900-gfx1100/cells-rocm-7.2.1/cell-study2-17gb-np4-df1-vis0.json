@@ -1,0 +1,62 @@
+{
+  "study": "study2",
+  "weight": "17gb",
+  "dflash": true,
+  "vision": false,
+  "np": 4,
+  "metrics": {
+    "agg_tok_s": 79.173512778948,
+    "total_tokens": 11996,
+    "wall_s": 151.51531843096018,
+    "ttft_p50": 0.3928202847018838,
+    "ttft_p90": 0.44688750971108676,
+    "tpot_median": 0.048301870263654706,
+    "agg_tok_s_min": 78.82606014599745,
+    "agg_tok_s_max": 79.32380617780527,
+    "reps": 5,
+    "finish_reason_dist": {
+      "length": 88,
+      "stop": 32
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 39292208,
+    "VmPeak_gib": 37.47,
+    "VmHWM_kib": 16715856,
+    "VmHWM_gib": 15.94,
+    "VmRSS_kib": 4370772,
+    "VmRSS_gib": 4.17,
+    "RssShmem_kib": 0,
+    "RssShmem_gib": 0.0,
+    "vram_used_mib": 19210.3,
+    "vram_total_mib": 49136.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 47523,
+    "draft_tokens": 243988,
+    "acceptance_rate": 0.19477597258881585,
+    "avg_accepted_per_step": 4.067109375
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": 70.0,
+    "temp_c": 50.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 4 -c 32768 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 15",
+    "seed": 42,
+    "reps": 5,
+    "build": "0b1bad1",
+    "rocm_version": "7.2.1",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Graphics\", \"Card Model\": \"0x744b\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"D7070910\", \"Subsystem ID\": \"0x0e0c\", \"Device Rev\": \"0x00\", \"Node ID\": \"3\", \"GUID\": \"49884\", \"GFX Version\": \"gfx1100\"}}",
+    "kernel": "6.8.0-79-generic",
+    "date": "2026-08-16"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 47523.0,
+    "draft_tokens": 243988.0,
+    "avg_accepted_per_step": 2.8966841399487993,
+    "acceptance_rate": 0.19477597258881585
+  }
+}

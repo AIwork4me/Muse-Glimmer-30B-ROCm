@@ -1,0 +1,61 @@
+{
+  "study": "study1",
+  "weight": "17gb",
+  "dflash": true,
+  "vision": false,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 62.03256794162757,
+    "total_tokens": 1536,
+    "wall_s": 24.761186759918928,
+    "ttft_p50": 0.18626742530614138,
+    "ttft_p90": 0.20029557310044765,
+    "tpot_median": 0.017172413078301092,
+    "agg_tok_s_min": 59.77118679719962,
+    "agg_tok_s_max": 63.345468895702474,
+    "reps": 3,
+    "finish_reason_dist": {
+      "length": 18
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 39357748,
+    "VmPeak_gib": 37.53,
+    "VmHWM_kib": 16716840,
+    "VmHWM_gib": 15.94,
+    "VmRSS_kib": 2243636,
+    "VmRSS_gib": 2.14,
+    "RssShmem_kib": 0,
+    "RssShmem_gib": 0.0,
+    "vram_used_mib": 18142.3,
+    "vram_total_mib": 49136.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 3944,
+    "draft_tokens": 16389,
+    "acceptance_rate": 0.24064921593751906,
+    "avg_accepted_per_step": 4.8915
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": 69.0,
+    "temp_c": 50.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 0 --seed 0 --metrics --port 8080 --host 127.0.0.1 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 15",
+    "seed": 0,
+    "reps": 3,
+    "build": "0b1bad1",
+    "rocm_version": "7.2.1",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Graphics\", \"Card Model\": \"0x744b\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"D7070910\", \"Subsystem ID\": \"0x0e0c\", \"Device Rev\": \"0x00\", \"Node ID\": \"3\", \"GUID\": \"49884\", \"GFX Version\": \"gfx1100\"}}",
+    "kernel": "6.8.0-79-generic",
+    "date": "2026-08-16"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 3944.0,
+    "draft_tokens": 16389.0,
+    "avg_accepted_per_step": 3.4385353095030515,
+    "acceptance_rate": 0.24064921593751906
+  }
+}

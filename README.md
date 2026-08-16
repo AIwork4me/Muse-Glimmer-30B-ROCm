@@ -42,6 +42,14 @@ gfx1151 rows validated on **ROCm 7.14.0** via the GGUF/llama.cpp matrix
 |---|---:|---:|---:|
 | gfx1151, K-Quant-17GB | 10.42 tok/s | 23.08 tok/s | **2.22×** |
 | gfx1151, dynamic K-Quant | 9.11 tok/s | 22.49 tok/s | **2.47×** |
+| W7900 (`gfx1100`), K-Quant-17GB | 33.31 tok/s | 62.03 tok/s | **1.86×** |
+
+W7900 rows: independently reproduced 2026-08-16 on a second W7900 host
+(ROCm 7.2.1, upstream llama.cpp at the validated pin) with draft acceptance
+~0.24 — raw cells:
+[`cells-rocm-7.2.1`](docs/results/hardware-validation/w7900-gfx1100/cells-rocm-7.2.1/).
+DFlash scales a bit less than on gfx1151 because the desktop card's much
+faster baseline is less memory-bound.
 
 A **methodology-aligned** comparison, not an identical reproduction — Meta did
 not publish its prompt corpus. The recorded arithmetic smoke check is
