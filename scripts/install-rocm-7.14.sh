@@ -28,6 +28,24 @@ for REQUIRED_TOOL in python3 curl; do
     fi
 done
 
+# gfx-scope warning (non-fatal; skipped for the ROCM714_MANIFEST test seam and
+# when no rocminfo is reachable): this archive is the gfx1151 distribution.
+# On other GPUs — notably W7900 (gfx1100) — it installs a stack whose rocBLAS
+# core-dumps multi-slot decode (no gfx1100 Tensile data; c=1 still works,
+# masking the trap). Observed 2026-08-16 during the W7900 ROCm 7.14 verification.
+if [ -z "${ROCM714_MANIFEST:-}" ] \
+        && observed_gpus="$( { command -v rocminfo >/dev/null 2>&1 && rocminfo 2>/dev/null; } \
+        | grep -oE 'gfx[0-9]+' | sort -u | paste -sd' ' || true )" \
+        && [ -n "$observed_gpus" ] && ! grep -qw gfx1151 <<<"$observed_gpus"; then
+    echo "WARNING: host GPU(s) [$observed_gpus] are not gfx1151." >&2
+    echo "         This archive is the gfx1151-only distribution; on gfx1100 (W7900) it" >&2
+    echo "         core-dumps multi-slot workloads in rocBLAS. W7900 users need the official" >&2
+    echo "         therock-dist-linux-gfx110X-all-7.14.0.tar.gz from the same channel — see" >&2
+    echo "         docs/results/w7900-gfx1100.md and docs/troubleshooting.md#rocblas-wrong-arch-tarball." >&2
+    echo "         Continuing in 10s (Ctrl-C to abort)..." >&2
+    sleep 10
+fi
+
 read_field() {
     python3 - "$MANIFEST" "$1" <<'PY'
 import json, sys

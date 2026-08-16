@@ -16,8 +16,11 @@ evidence today. **ROCm 7.14.0 is the recommended default** (GGUF/llama.cpp
 project-validated within a reduced 19-cell scope); **ROCm 7.2.1 remains the full
 historical reference stack** (supplementary). Current rocBLAS BF16-GEMM proxy
 results did not justify prioritizing a ROCm 7.14 vLLM rebuild for v0.1. ROCm
-7.14 Muse-Glimmer vLLM validation is pending, historical 7.2.1 validation is
-preserved, and the Radeon dGPU track remains pending.
+7.14 Muse-Glimmer vLLM validation is pending and historical 7.2.1 validation is
+preserved. The **Radeon W7900 (`gfx1100`) dGPU track landed 2026-08-16**
+(PR #6, community-validated, then independently reproduced by the maintainer
+on ROCm 7.2.1 and the recommended 7.14.0 stack — 23 raw cells committed under
+`docs/results/hardware-validation/w7900-gfx1100/`).
 
 ## Sources of truth
 

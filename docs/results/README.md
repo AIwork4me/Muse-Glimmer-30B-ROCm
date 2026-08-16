@@ -51,11 +51,15 @@ non-completions. Both are results.
 
 ## W7900 (gfx1100) throughput validation
 
-Study 2 (throughput under load) reproduced on a single **Radeon PRO W7900**
-(`gfx1100` / RDNA3, 48 GiB) — a distinct platform that neither replaces nor
-relabels the gfx1151 records above.
+**Study 2 (throughput under load) plus Study 1 (greedy DFlash anchor)**
+validated on a single **Radeon PRO W7900** (`gfx1100` / RDNA3, 48 GiB) — a
+distinct platform that neither replaces nor relabels the gfx1151 records above.
+Three labeled passes: the original community submission (ROCm 7.2.4 image),
+an independent reproduction (ROCm 7.2.1, every overlap within ±3%), and a
+**full 14/14-cell pass on ROCm 7.14.0**, the recommended default.
 
 - Results & interpretation: [w7900-gfx1100.md](w7900-gfx1100.md)
+- Raw cells by ROCm version:
+  [7.2.1](hardware-validation/w7900-gfx1100/cells-rocm-7.2.1/) ·
+  [7.14.0](hardware-validation/w7900-gfx1100/cells-rocm-7.14.0/)
 - Reproduction (two methods — Docker image or bare metal): [`../../scripts/w7900-repro/`](../../scripts/w7900-repro/)
-
-Baseline at `c` (= `-np`) `1 / 4 / 16 / 32` plus DFlash at `c = 1 / 4`.

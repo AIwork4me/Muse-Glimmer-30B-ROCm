@@ -71,7 +71,7 @@ corroborated within ±3% by independent ROCm 7.2.1/7.2.4 runs.
 | W7900 (`gfx1100`) | 17GB | 33.72 / 54.27 | 65.69 / 78.88 | 220.62 | 276.16 |
 | W7900 (`gfx1100`) | dynamic | 30.54 / 54.63 | 64.63 / 72.26 | 202.68 | 280.49 |
 
-The W7900 runs ~3.2–3.4× the gfx1151 APU at `c=1` and up to ~6.6× at `c=16`
+The W7900 runs ~3.2–3.3× the gfx1151 APU at `c=1` and ~6.4–6.5× at `c=16`
 (dedicated GDDR6 vs unified LPDDR5X); peak VRAM ≤ 24.9 GiB of 48. W7900
 **requires the `gfx110X-all` ROCm tarball** — the pinned `gfx1151` tarball
 core-dumps multi-slot decode (rocBLAS ships no gfx1100 kernels). Full detail,
