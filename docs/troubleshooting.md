@@ -446,3 +446,46 @@ request gets `-c / -np` of context. If the per-slot context is below your
 benchmark harness uses `-c = np × 8192` so each slot has 8192 — comfortably above
 `max_tokens`. If you configure concurrency manually, keep per-slot context well
 above `max_tokens`.
+
+## rocblas-wrong-arch-tarball
+
+**Symptom:** on a W7900 (`gfx1100`), `llama-server` serves single requests
+fine but **core-dumps once more than one slot decodes concurrently**; the log
+ends with `rocBLAS error: Cannot read .../rocblas/library/TensileLibrary.dat:
+No such file or directory for GPU arch : gfx1100` followed by `dumped core`.
+
+**Cause observed on the project host:** the ROCm 7.14.0 archive this repo
+pins for the gfx1151 quickstart (`therock-dist-linux-gfx1151-7.14.0.tar.gz`)
+ships rocBLAS Tensile data for gfx1151 only. Batched (multi-slot) GEMM calls
+rocBLAS, finds no gfx1100 kernels, and aborts the process. Single-stream
+decode never hits rocBLAS, which is why `c=1` looks healthy and the failure
+looks intermittent.
+
+**Project-reference fix:** on W7900 install the official
+**`gfx110X-all`** tarball instead —
+`https://repo.amd.com/rocm/tarball-multi-arch/therock-dist-linux-gfx110X-all-7.14.0.tar.gz`
+(same channel, gfx1100-family scope) — or distro packages that cover gfx1100,
+then rebuild llama.cpp against that prefix. Full record:
+[W7900 ROCm 7.14.0 cells — findings](../results/hardware-validation/w7900-gfx1100/cells-rocm-7.14.0/README.md).
+The gfx1151 quickstart path is unaffected.
+
+## orphan-server-contaminates-bench
+
+**Symptom:** a benchmark cell returns implausibly low throughput (e.g. half
+the expected value), `bench_client` dies with `ServerDisconnectedError` /
+`TransferEncodingError` mid-stream, or a cell stalls for an hour with the GPU
+at ~100% but the token counter barely moving.
+
+**Cause observed on the project host:** a leftover `llama-server` from an
+interrupted earlier run still holds port 8080 and/or half the VRAM. The next
+cell's server then competes for the GPU, fails to bind, or answers through
+the stale process — measurements are contaminated or the client stream breaks.
+
+**Project-reference fix:** before **and** after every cell, verify the
+environment is clean: `pgrep -x llama-server` must be empty and
+`rocm-smi --showmeminfo vram` must show the idle baseline (~28 MB on the
+project W7900). Kill leftovers by exact name (`pkill -9 -x llama-server`),
+never by a `-f` pattern that can match the driver's own shell. One contaminated
+cell was caught this way during the 7.14 verification (15.47 tok/s vs the true
+~30.5); it was deleted and re-measured. The reproduction driver is resumable
+(`RESUME=1`), so the safe recovery is: stop everything, clean, re-run.

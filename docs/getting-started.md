@@ -5,6 +5,16 @@ optional reading: prerequisites, what the installer actually does, download
 sizes, optional features, and the reproducibility knobs that keep runs on the
 validated reference.
 
+> **Not on gfx1151?** The quick start, the ROCm 7.14 installer and
+> `00-check-env.sh` are scoped to the project-validated **Ryzen AI MAX+ PRO
+> 395 / Radeon 8060S (`gfx1151`)** host and stop early on other GPUs.
+> **Radeon PRO W7900 (`gfx1100`) users have a validated path**: follow
+> [docs/results/w7900-gfx1100.md](results/w7900-gfx1100.md) and
+> [`scripts/w7900-repro/`](../scripts/w7900-repro/) instead, and install the
+> ROCm **`gfx110X-all`** tarball — the gfx1151 tarball core-dumps multi-slot
+> decode on W7900 (see
+> [troubleshooting](troubleshooting.md#rocblas-wrong-arch-tarball)).
+
 ## Prerequisites
 
 Default GGUF path: `git`, `cmake`, `curl`, Python 3, and a gfx1151-capable HIP

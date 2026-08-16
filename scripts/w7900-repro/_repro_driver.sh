@@ -50,11 +50,19 @@ done
 END=$(date +%s); log "wall time: $(( (END-START)/60 )) min"
 
 # --- provenance + render artifacts ---
+# Tolerate truncated/corrupt cell files (an interrupted run can leave one):
+# they are skipped with a notice instead of crashing the whole provenance
+# pass, so RESUME works no matter how the previous attempt died.
 python3 - "$MATRIX" "$VER" "$IMG" <<'PY'
 import glob,json,os,sys
 outdir,ver,img=sys.argv[1:]; n=0
 for p in glob.glob(os.path.join(outdir,"cell-study2-*.json")):
-    d=json.load(open(p)); m=d.setdefault("manifest",{})
+    try:
+        d=json.load(open(p))
+    except (OSError, json.JSONDecodeError) as e:
+        print("SKIP (unreadable cell, likely truncated by an interrupted run):",p,"-",e)
+        continue
+    m=d.setdefault("manifest",{})
     m["build"]=f"image:{img} (llama.cpp {ver})"; m["host"]="Radeon PRO W7900 (gfx1100)"
     m["gfx"]="gfx1100"; m["image"]=img; m["gpu_index"]=0
     json.dump(d,open(p,"w"),indent=2); n+=1

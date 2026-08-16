@@ -10,6 +10,17 @@ export PATH="$HOME/.local/bin:$PATH"
 # its own matrix-714/ output dir without touching this script's 7.2.1 defaults.
 LLAMA="${LLAMA_BIN:-$HERE/third_party/llama.cpp/build/bin/llama-server}"
 
+# Fail before launching anything if the benchmark client launcher is missing:
+# `uv run --no-sync` is used below, and a bare "uv: command not found" after a
+# multi-minute model load is the most expensive possible way to find out.
+# (The w7900-repro package ships a `uv`->python3 shim on PATH; that resolves
+# here too.)
+command -v uv >/dev/null 2>&1 || {
+    echo "ERROR: 'uv' not found on PATH — the benchmark client is launched via 'uv run'." >&2
+    echo "       Install uv (https://docs.astral.sh/uv/), or put the w7900-repro _uvshim on PATH." >&2
+    exit 1
+}
+
 STUDY=$1; WEIGHT=$2; DFLASH=$3; VISION=$4; NP=$5; CONF=$6
 # shellcheck source=/dev/null
 . "$CONF"

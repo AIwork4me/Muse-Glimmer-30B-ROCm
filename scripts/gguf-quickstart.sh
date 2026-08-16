@@ -72,6 +72,21 @@ for cmd in cmake curl git python3; do
     }
 done
 
+# F-19: fail fast on a non-gfx1151 GPU instead of building a wrong-arch
+# llama.cpp for ~15 minutes and failing at server start with an opaque HIP
+# error. rocminfo listing no gfx target at all (no GPU visible / test
+# sandbox) is left to 00-check-env.sh, which owns that diagnostic.
+observed_gpus="$( { "$ROCM_PREFIX/bin/rocminfo" 2>/dev/null || true; } \
+    | grep -oE 'gfx[0-9]+' | sort -u | paste -sd' ' || true )"
+if [ -n "$observed_gpus" ] && ! grep -qw gfx1151 <<<"$observed_gpus"; then
+    echo "ERROR: this quickstart builds for gfx1151, but rocminfo reports: $observed_gpus." >&2
+    echo "       The project-validated host is AMD Ryzen AI MAX+ PRO 395 / Radeon 8060S (gfx1151)." >&2
+    echo "       Radeon PRO W7900 (gfx1100): use the validated W7900 path instead —" >&2
+    echo "       docs/results/w7900-gfx1100.md and scripts/w7900-repro/ (ROCm gfx110X-all tarball)." >&2
+    echo "       Other platforms: see docs/hardware-validation.md before proceeding." >&2
+    exit 1
+fi
+
 stack_value() {
     python3 - "$HERE/configs/validated-stack.json" "$1" <<'PY'
 import json, sys

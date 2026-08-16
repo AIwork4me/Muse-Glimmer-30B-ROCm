@@ -69,6 +69,22 @@ LLAMA_BIN_HOST=/path/to/llama.cpp/build/bin/llama-server \
 > No `llama-server`? Build it from llama.cpp source for gfx1100, or copy it out of
 > the Method-1 image: `docker cp <container>:/llamacpp_workspace/bin/llama-server .`
 
+> **ROCm 7.14.0 note:** to reproduce on the project-recommended 7.14 line,
+> install the official **`therock-dist-linux-gfx110X-all-7.14.0.tar.gz`** and
+> build `llama-server` against that prefix. The repo-pinned `gfx1151` tarball
+> **core-dumps multi-slot decode on W7900** (rocBLAS ships no gfx1100 kernels;
+> `c=1` works, masking the trap) —
+> [troubleshooting](../../docs/troubleshooting.md#rocblas-wrong-arch-tarball).
+
+> **Interrupted run? Clean before resuming.** The driver is resumable
+> (`RESUME=1`, default), but a leftover `llama-server` from a killed run holds
+> port 8080 and VRAM and silently contaminates the next cell. Before and after
+> each session verify `pgrep -x llama-server` is empty and `rocm-smi
+> --showmeminfo vram` shows the idle baseline (~28 MB). Kill by exact name
+> (`pkill -9 -x llama-server`), never by a `-f` pattern that can match the
+> driver's own shell. Symptom catalog:
+> [orphan-server-contaminates-bench](../../docs/troubleshooting.md#orphan-server-contaminates-bench).
+
 ## Files
 
 | File | Role |
