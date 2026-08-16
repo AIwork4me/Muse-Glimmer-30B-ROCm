@@ -43,7 +43,8 @@
     {
       "hardware": "Radeon W7900",
       "gpu_arch": "gfx1100",
-      "status": "planned"
+      "status": "community-validated",
+      "evidence": "docs/results/hardware-validation/w7900-gfx1100/manifest.json"
     },
     {
       "hardware": "Other RDNA3 / future RDNA4",

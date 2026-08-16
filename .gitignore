@@ -7,3 +7,10 @@ models/
 docs/results/*.log
 docs/results/*.json
 docs/results/.matrix-721-baseline-snapshot/
+
+# W7900 reproduction: local model store (symlink or dir) + benchmark outputs
+/models
+scripts/w7900-repro/_out/
+scripts/w7900-repro/logs/
+scripts/w7900-repro/bin/llama-server
+scripts/w7900-repro/bin/llama-*
