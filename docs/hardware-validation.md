@@ -17,10 +17,12 @@ Current status:
 | Platform | Status |
 |---|---|
 | Ryzen AI MAX+ PRO 395 / Radeon 8060S (`gfx1151`) | ✅ **Validated** |
-| Radeon W7900 (`gfx1100`) | 🚧 **Planned** |
+| Radeon W7900 (`gfx1100`) | 🧪 **Community validated** |
 | Other RDNA3 / future RDNA4 (`various`) | 🚧 **Planned** |
 | MI300X / MI355X (`CDNA`) | 📘 **Upstream recipe** |
 <!-- END GENERATED: hardware-matrix -->
+
+> W7900 evidence: [results/w7900-gfx1100.md](results/w7900-gfx1100.md) — Study 2 (throughput under load), reproducible via [scripts/w7900-repro/](../scripts/w7900-repro/).
 
 ## BIOS / UMA memory sizing
 

@@ -1,0 +1,66 @@
+{
+  "study": "study2",
+  "weight": "17gb",
+  "dflash": true,
+  "vision": false,
+  "np": 4,
+  "metrics": {
+    "agg_tok_s": 78.88101372283849,
+    "total_tokens": 11996,
+    "wall_s": 152.07715309225023,
+    "ttft_p50": 0.41162845212966204,
+    "ttft_p90": 0.5626154713332653,
+    "tpot_median": 0.04846160314320531,
+    "agg_tok_s_min": 76.65883254892562,
+    "agg_tok_s_max": 79.05145108725105,
+    "reps": 5,
+    "finish_reason_dist": {
+      "length": 88,
+      "stop": 32
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 38805116,
+    "VmPeak_gib": 37.01,
+    "VmHWM_kib": 16878056,
+    "VmHWM_gib": 16.1,
+    "VmRSS_kib": 4736544,
+    "VmRSS_gib": 4.52,
+    "RssShmem_kib": 711652,
+    "RssShmem_gib": 0.68,
+    "vram_used_mib": 19208.8,
+    "vram_total_mib": 49136.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 47396,
+    "draft_tokens": 243838,
+    "acceptance_rate": 0.19437495386281056,
+    "avg_accepted_per_step": 4.05734375
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": 61.0,
+    "temp_c": 48.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 4 -c 32768 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 15",
+    "seed": 42,
+    "reps": 5,
+    "build": "image:rocm-7.14.0-gfx110X-all-host (llama.cpp version: 1 (0b1bad14f))",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Pro W7900D\", \"Card Model\": \"0x744b\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"D7070910\", \"Subsystem ID\": \"0x0e0c\", \"Device Rev\": \"0x00\", \"Node ID\": \"3\", \"GUID\": \"49884\", \"GFX Version\": \"gfx1100\"}}",
+    "kernel": "6.8.0-79-generic",
+    "date": "2026-08-16",
+    "host": "Radeon PRO W7900 (gfx1100)",
+    "gfx": "gfx1100",
+    "image": "rocm-7.14.0-gfx110X-all-host",
+    "gpu_index": 0
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 47396.0,
+    "draft_tokens": 243838.0,
+    "avg_accepted_per_step": 2.8901762302579423,
+    "acceptance_rate": 0.19437495386281056
+  }
+}

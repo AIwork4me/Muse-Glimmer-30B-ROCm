@@ -7,6 +7,23 @@ approval.
 
 ## [Unreleased]
 
+### Added
+
+- **Radeon W7900 (`gfx1100`) validation landed** (PR #6 + maintainer
+  verification): the full 12-cell Study-2 matrix and both Study-1 cells now
+  have committed raw-cell evidence on **three ROCm stacks** — the original
+  7.2.4 submission, an independent 7.2.1 reproduction (9 cells; every
+  overlapping value within ±3%), and a **complete 14/14-cell ROCm 7.14.0
+  pass** (the recommended default) using the official
+  `gfx110X-all` tarball. A `scripts/w7900-repro/` reproduction package
+  (Docker and bare-metal paths) ships with the repo. README headline tables
+  now carry W7900 rows labeled by ROCm version.
+- Negative findings preserved: the pinned **gfx1151 ROCm 7.14 tarball
+  core-dumps multi-slot decode on W7900** (rocBLAS ships no gfx1100 Tensile
+  data; `gfx110X-all` required), and an apparent `c=32` pathology was
+  traced to a polluted process tree rather than a code path — isolated
+  retry completed normally. Both are documented in the W7900 cells bundles.
+
 ### Changed
 
 - README restructured for first-visit readability: **what you get,

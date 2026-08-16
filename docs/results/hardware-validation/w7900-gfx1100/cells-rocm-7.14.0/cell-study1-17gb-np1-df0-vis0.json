@@ -1,0 +1,54 @@
+{
+  "study": "study1",
+  "weight": "17gb",
+  "dflash": false,
+  "vision": false,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 33.21463393397321,
+    "total_tokens": 1536,
+    "wall_s": 46.24467645958066,
+    "ttft_p50": 0.1853839997202158,
+    "ttft_p90": 0.19366357941180468,
+    "tpot_median": 0.029579110147760195,
+    "agg_tok_s_min": 33.07787513754754,
+    "agg_tok_s_max": 33.23967453257873,
+    "reps": 3,
+    "finish_reason_dist": {
+      "length": 18
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 38721132,
+    "VmPeak_gib": 36.93,
+    "VmHWM_kib": 16873972,
+    "VmHWM_gib": 16.09,
+    "VmRSS_kib": 1669076,
+    "VmRSS_gib": 1.59,
+    "RssShmem_kib": 311580,
+    "RssShmem_gib": 0.3,
+    "vram_used_mib": 15979.4,
+    "vram_total_mib": 49136.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 0.0,
+    "draft_tokens": 0.0,
+    "avg_accepted_per_step": null
+  },
+  "acceptance_source": "metrics",
+  "power_temp": {
+    "power_w": 73.0,
+    "temp_c": 60.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 0 --seed 0 --metrics --port 8080 --host 127.0.0.1",
+    "seed": 0,
+    "reps": 3,
+    "build": "0b1bad1",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Pro W7900D\", \"Card Model\": \"0x744b\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"D7070910\", \"Subsystem ID\": \"0x0e0c\", \"Device Rev\": \"0x00\", \"Node ID\": \"3\", \"GUID\": \"49884\", \"GFX Version\": \"gfx1100\"}}",
+    "kernel": "6.8.0-79-generic",
+    "date": "2026-08-16"
+  }
+}

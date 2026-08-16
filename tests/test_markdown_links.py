@@ -15,6 +15,9 @@ DOCS = [
     ROOT / "docs/hardware-validation.md",
     ROOT / "docs/results/METHODOLOGY.md",
     ROOT / "docs/results/benchmark.md",
+    ROOT / "docs/results/w7900-gfx1100.md",
+    ROOT / "docs/results/hardware-validation/w7900-gfx1100/manifest.json",
+    ROOT / "scripts/w7900-repro/README.md",
     ROOT / "schemas/README.md",
 ]
 LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
