@@ -33,7 +33,8 @@ Method: **Adapt → Validate → Benchmark → Explain → Reproduce.**
 
 gfx1151 rows validated on **ROCm 7.14.0** via the GGUF/llama.cpp matrix
 ([`docs/results/matrix-714/`](docs/results/matrix-714/)). The W7900
-(`gfx1100`) rows are a separate community-validated track on ROCm 7.2.4
+(`gfx1100`) rows are community-validated and independently reproduced on
+**ROCm 7.14.0** (recommended default) and **7.2.1**
 ([W7900 results](docs/results/w7900-gfx1100.md)).
 
 **Single-stream (Study 1, greedy, Meta-aligned DFlash anchor):**
@@ -42,12 +43,12 @@ gfx1151 rows validated on **ROCm 7.14.0** via the GGUF/llama.cpp matrix
 |---|---:|---:|---:|
 | gfx1151, K-Quant-17GB | 10.42 tok/s | 23.08 tok/s | **2.22×** |
 | gfx1151, dynamic K-Quant | 9.11 tok/s | 22.49 tok/s | **2.47×** |
-| W7900 (`gfx1100`), K-Quant-17GB | 33.31 tok/s | 62.03 tok/s | **1.86×** |
+| W7900 (`gfx1100`), K-Quant-17GB | 33.21 tok/s | 61.45 tok/s | **1.85×** |
 
-W7900 rows: independently reproduced 2026-08-16 on a second W7900 host
-(ROCm 7.2.1, upstream llama.cpp at the validated pin) with draft acceptance
-~0.24 — raw cells:
-[`cells-rocm-7.2.1`](docs/results/hardware-validation/w7900-gfx1100/cells-rocm-7.2.1/).
+W7900 rows: ROCm 7.14.0, draft acceptance ~0.24 — raw cells:
+[`cells-rocm-7.14.0`](docs/results/hardware-validation/w7900-gfx1100/cells-rocm-7.14.0/)
+(corroborated on ROCm 7.2.1: 33.31 / 62.03,
+[`cells-rocm-7.2.1`](docs/results/hardware-validation/w7900-gfx1100/cells-rocm-7.2.1/)).
 DFlash scales a bit less than on gfx1151 because the desktop card's much
 faster baseline is less memory-bound.
 
@@ -59,20 +60,23 @@ byte-identical under greedy decoding; no broader equivalence claim is made
 **Throughput under load (Study 2, aggregate tok/s):**
 
 `c` is llama.cpp concurrency (`-np`). gfx1151 `c=1`/`c=4` are ROCm 7.14
-values; `c=16` is 7.2.1-only (⚠). The W7900 (`gfx1100`) rows are a separate
-community-validated Radeon dGPU track (ROCm 7.2.4), extended to `c=32`.
+values; `c=16` is 7.2.1-only (⚠). The W7900 (`gfx1100`) rows were measured
+on **ROCm 7.14.0** (the recommended default; `gfx110X-all` tarball) and are
+corroborated within ±3% by independent ROCm 7.2.1/7.2.4 runs.
 
 | GPU | Weight | c=1 baseline / DFlash | c=4 baseline / DFlash | c=16 baseline | c=32 baseline |
 |---|---|---:|---:|---:|---:|
 | gfx1151 | 17GB | 10.50 / 21.37 | 21.93 / 32.42 | 34.47 ⚠ | — |
 | gfx1151 | dynamic | 9.21 / 19.69 | 20.99 / 31.10 | 31.05 ⚠ | — |
-| W7900 (`gfx1100`) | 17GB | 33.72 / 56.35 | 66.46 / 77.44 | 218.56 | 293.29 |
-| W7900 (`gfx1100`) | dynamic | 30.61 / 51.92 | 65.63 / 71.51 | 209.65 | 265.71 |
+| W7900 (`gfx1100`) | 17GB | 33.72 / 54.27 | 65.69 / 78.88 | 220.62 | 276.16 |
+| W7900 (`gfx1100`) | dynamic | 30.54 / 54.63 | 64.63 / 72.26 | 202.68 | 280.49 |
 
-The W7900 runs ~3.2–3.4× the gfx1151 APU at `c=1` and up to ~6.8× at `c=16`
-(dedicated GDDR6 vs unified LPDDR5X); peak VRAM ≤ 24.9 GiB of 48. Full detail,
-recommended W7900 serving presets and reproduction:
-[W7900 results](docs/results/w7900-gfx1100.md) ·
+The W7900 runs ~3.2–3.4× the gfx1151 APU at `c=1` and up to ~6.6× at `c=16`
+(dedicated GDDR6 vs unified LPDDR5X); peak VRAM ≤ 24.9 GiB of 48. W7900
+**requires the `gfx110X-all` ROCm tarball** — the pinned `gfx1151` tarball
+core-dumps multi-slot decode (rocBLAS ships no gfx1100 kernels). Full detail,
+recommended W7900 serving presets, all three ROCm-version passes and
+reproduction: [W7900 results](docs/results/w7900-gfx1100.md) ·
 [`scripts/w7900-repro/`](scripts/w7900-repro/).
 
 ⚠ c=16 is **ROCm 7.2.1-only** (deferred on the 7.14 reduced matrix); c=1/c=4
@@ -186,7 +190,10 @@ status and the rocBLAS proxy that shaped this prioritization.
 
 `🧪 Community validated` is reserved for a submission that includes the
 required manifest, command, logs and results. See
-[hardware-validation.md](docs/hardware-validation.md) to add one. AMD's
+[hardware-validation.md](docs/hardware-validation.md) to add one. The W7900
+entry (PR #6) was additionally **independently reproduced by the maintainer**
+on ROCm 7.2.1 and the recommended 7.14.0 stack — 23 raw cells committed under
+[docs/results/hardware-validation/w7900-gfx1100/](docs/results/hardware-validation/w7900-gfx1100/). AMD's
 [platform support](https://rocm.docs.amd.com/en/docs-7.14.0/about/release-notes.html)
 for `gfx1151` is distinct from the workload validation and benchmark evidence
 produced independently by this project.
@@ -220,7 +227,7 @@ See [ROCm 7.14 scoped validation](docs/results/rocm-7.14/README.md) and its
 | `-md dflash.gguf` without `--spec-type draft-dflash` | Silent no-op; do not use |
 | DFlash + `-np 16` | Pathological; one cell aborted after 5 h 16 m; root cause diagnosed and [reported upstream](https://github.com/ggml-org/llama.cpp/issues/27117) |
 | AITER or FP8 vLLM paths on `gfx1151` | Not supported by this validated stack |
-| llama.cpp HIP + 17GB/dynamic K-quant on `gfx1100` (W7900) | Validated (Study 2 throughput; DFlash helps at c≤4) |
+| llama.cpp HIP + 17GB/dynamic K-quant on `gfx1100` (W7900) | Validated on ROCm 7.14.0 + 7.2.x (Study 1+2; DFlash helps at c≤4) |
 | Other RDNA3 / RDNA4 dGPUs | Pending evidence |
 
 **Negative results are results.** The project preserves the silent-DFlash

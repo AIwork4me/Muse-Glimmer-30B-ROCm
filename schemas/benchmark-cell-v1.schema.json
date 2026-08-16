@@ -71,7 +71,11 @@
         "rocm": {"type": "string"},
         "kernel": {"type": "string"},
         "date": {"type": "string", "format": "date"},
-        "note": {"type": "string"}
+        "note": {"type": "string"},
+        "host": {"type": "string"},
+        "gfx": {"type": "string"},
+        "image": {"type": "string"},
+        "gpu_index": {"type": "integer"}
       },
       "additionalProperties": false
     }

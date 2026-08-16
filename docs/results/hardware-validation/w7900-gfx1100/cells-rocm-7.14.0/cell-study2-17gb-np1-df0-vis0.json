@@ -1,0 +1,59 @@
+{
+  "study": "study2",
+  "weight": "17gb",
+  "dflash": false,
+  "vision": false,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 33.72119651099828,
+    "total_tokens": 2934,
+    "wall_s": 87.00758880376816,
+    "ttft_p50": 0.18354424834251404,
+    "ttft_p90": 0.22214177902787924,
+    "tpot_median": 0.02931776058000386,
+    "agg_tok_s_min": 33.719516074893576,
+    "agg_tok_s_max": 33.75959253456753,
+    "reps": 5,
+    "finish_reason_dist": {
+      "length": 20,
+      "stop": 10
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 38704752,
+    "VmPeak_gib": 36.91,
+    "VmHWM_kib": 16878152,
+    "VmHWM_gib": 16.1,
+    "VmRSS_kib": 1771100,
+    "VmRSS_gib": 1.69,
+    "RssShmem_kib": 312408,
+    "RssShmem_gib": 0.3,
+    "vram_used_mib": 16003.5,
+    "vram_total_mib": 49136.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 0.0,
+    "draft_tokens": 0.0,
+    "avg_accepted_per_step": null
+  },
+  "acceptance_source": "metrics",
+  "power_temp": {
+    "power_w": 68.0,
+    "temp_c": 61.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-17gb.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64",
+    "seed": 42,
+    "reps": 5,
+    "build": "image:rocm-7.14.0-gfx110X-all-host (llama.cpp version: 1 (0b1bad14f))",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Pro W7900D\", \"Card Model\": \"0x744b\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"D7070910\", \"Subsystem ID\": \"0x0e0c\", \"Device Rev\": \"0x00\", \"Node ID\": \"3\", \"GUID\": \"49884\", \"GFX Version\": \"gfx1100\"}}",
+    "kernel": "6.8.0-79-generic",
+    "date": "2026-08-16",
+    "host": "Radeon PRO W7900 (gfx1100)",
+    "gfx": "gfx1100",
+    "image": "rocm-7.14.0-gfx110X-all-host",
+    "gpu_index": 0
+  }
+}

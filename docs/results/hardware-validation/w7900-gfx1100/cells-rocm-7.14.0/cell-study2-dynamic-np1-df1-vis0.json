@@ -1,0 +1,62 @@
+{
+  "study": "study2",
+  "weight": "dynamic",
+  "dflash": true,
+  "vision": false,
+  "np": 1,
+  "metrics": {
+    "agg_tok_s": 54.63314010392594,
+    "total_tokens": 2912,
+    "wall_s": 53.35008964501321,
+    "ttft_p50": 0.19837405160069466,
+    "ttft_p90": 0.2475908100605011,
+    "tpot_median": 0.017740057790714844,
+    "agg_tok_s_min": 54.529324645956315,
+    "agg_tok_s_max": 55.0080348418782,
+    "reps": 5,
+    "finish_reason_dist": {
+      "length": 20,
+      "stop": 10
+    }
+  },
+  "mem": {
+    "VmPeak_kib": 44427952,
+    "VmPeak_gib": 42.37,
+    "VmHWM_kib": 19705388,
+    "VmHWM_gib": 18.79,
+    "VmRSS_kib": 2569924,
+    "VmRSS_gib": 2.45,
+    "RssShmem_kib": 656220,
+    "RssShmem_gib": 0.63,
+    "vram_used_mib": 20938.8,
+    "vram_total_mib": 49136.0
+  },
+  "acceptance": {
+    "accepted_draft_tokens": 11872,
+    "draft_tokens": 55237,
+    "acceptance_rate": 0.21492839944240275,
+    "avg_accepted_per_step": 4.3759375
+  },
+  "acceptance_source": "log",
+  "power_temp": {
+    "power_w": 68.0,
+    "temp_c": 55.0
+  },
+  "llama_log_mem": "",
+  "manifest": {
+    "flags": "-m models/muse-glimmer-30B-kquant-dynamic.gguf -ngl 999 -np 1 -c 8192 --jinja --temp 1.0 --seed 42 --metrics --port 8080 --host 127.0.0.1 --top-p 0.95 --top-k 64 -md models/dflash-kquant.gguf -ngld 99 --spec-type draft-dflash --spec-draft-n-max 15",
+    "seed": 42,
+    "reps": 5,
+    "build": "0b1bad1",
+    "rocm_version": "7.14.0",
+    "rocm": "{\"card0\": {\"Card Series\": \"AMD Radeon Pro W7900D\", \"Card Model\": \"0x744b\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Card SKU\": \"D7070910\", \"Subsystem ID\": \"0x0e0c\", \"Device Rev\": \"0x00\", \"Node ID\": \"3\", \"GUID\": \"49884\", \"GFX Version\": \"gfx1100\"}}",
+    "kernel": "6.8.0-79-generic",
+    "date": "2026-08-16"
+  },
+  "acceptance_metrics_secondary": {
+    "accepted_draft_tokens": 11872.0,
+    "draft_tokens": 55237.0,
+    "avg_accepted_per_step": 3.1854038100348805,
+    "acceptance_rate": 0.21492839944240275
+  }
+}
